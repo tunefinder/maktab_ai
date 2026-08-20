@@ -55,9 +55,13 @@ export async function POST(req: Request) {
     // Create session token and set cookie
     const token = createSessionToken({
       userId: user.id,
+      username: user.username,
+      name: user.name,
       email: user.email || undefined,
       phone: user.phone || undefined,
-      role: user.role
+      role: user.role,
+      plan: user.plan,
+      planExpiresAt: user.planExpiresAt ? user.planExpiresAt.toISOString() : null
     });
 
     const response = NextResponse.json({

@@ -74,7 +74,10 @@ export async function POST(req: Request) {
     // Create session token and set cookie
     const token = createSessionToken({
       userId: newUser.id,
-      role: newUser.role
+      username: newUser.username,
+      name: newUser.name,
+      role: newUser.role,
+      plan: newUser.plan
     });
 
     const response = NextResponse.json({

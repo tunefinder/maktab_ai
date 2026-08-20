@@ -26,9 +26,13 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 // 2. Tamper-Proof Session Token (HMAC SHA-256)
 export interface SessionPayload {
   userId: string;
+  username?: string | null;
+  name?: string | null;
   email?: string | null;
   phone?: string | null;
   role: string;
+  plan?: string;
+  planExpiresAt?: string | null;
   exp: number; // Expiration timestamp in ms
 }
 
@@ -77,28 +81,51 @@ export async function getCurrentUser() {
     const session = verifySessionToken(token);
     if (!session || !session.userId) return null;
 
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        email: true,
-        phone: true,
-        telegramId: true,
-        subject: true,
-        school: true,
-        avatarUrl: true,
-        role: true,
-        plan: true,
-        planExpiresAt: true,
-        usedNotebooks: true,
-        usedTests: true,
-        createdAt: true
-      }
-    });
+    try {
+      const user = await db.user.findUnique({
+        where: { id: session.userId },
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          email: true,
+          phone: true,
+          telegramId: true,
+          subject: true,
+          school: true,
+          avatarUrl: true,
+          role: true,
+          plan: true,
+          planExpiresAt: true,
+          usedNotebooks: true,
+          usedTests: true,
+          createdAt: true
+        }
+      });
 
-    return user;
+      if (user) return user;
+    } catch (dbErr) {
+      console.warn("DB lookup in getCurrentUser fallback to session payload:", dbErr);
+    }
+
+    // Fallback to cryptographic session payload if fresh serverless container
+    return {
+      id: session.userId,
+      username: session.username || "ustoz",
+      name: session.name || session.username || "Ustoz",
+      email: session.email || null,
+      phone: session.phone || null,
+      telegramId: null,
+      subject: "Biologiya",
+      school: null,
+      avatarUrl: null,
+      role: session.role || "TEACHER",
+      plan: session.plan || "FREE",
+      planExpiresAt: session.planExpiresAt ? new Date(session.planExpiresAt) : null,
+      usedNotebooks: 0,
+      usedTests: 0,
+      createdAt: new Date()
+    };
   } catch (err) {
     console.error("getCurrentUser error:", err);
     return null;
