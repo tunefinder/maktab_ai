@@ -8,7 +8,9 @@ const pool = new Pool({
 async function addAllOldKeys() {
   const keys = [
     { key: 'PRO-62CC-744C', plan: 'PRO', days: 30 },
-    { key: 'VIP-DB83-6000', plan: 'VIP', days: 365 },
+    { key: 'VIP-BA5F-FB7B', plan: 'VIP', days: 30 },
+    { key: 'VIP-39AC-9122', plan: 'VIP', days: 30 },
+    { key: 'VIP-DB83-6000', plan: 'VIP', days: 30 },
     { key: 'PRO-5429-D850', plan: 'PRO', days: 30 },
     { key: 'PRO-F182-DCF2', plan: 'PRO', days: 7 },
     { key: 'PRO-89E9-278D', plan: 'PRO', days: 7 }

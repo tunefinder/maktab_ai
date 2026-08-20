@@ -161,7 +161,7 @@ async function sendInvoice(chatId, plan, amount, durationDays) {
     createdAt: Date.now()
   });
 
-  const title = plan === 'VIP' ? 'Maktab VIP (1 yil)' : 'Ustoz PRO (1 oy)';
+  const title = plan === 'VIP' ? 'Maktab VIP (1 oy)' : 'Ustoz PRO (1 oy)';
 
   const text = `
 💳 <b>TO'LOV MA'LUMOTLARI:</b>
@@ -262,7 +262,7 @@ async function approvePayment(adminChatId, messageId, customerChatId, plan, dura
     console.log(`✅ To'lov tasdiqlandi! Kalit yaratildi: ${key} (${plan})`);
 
     // 1. Send key to Customer
-    const title = plan === 'VIP' ? '👑 Maktab VIP (1 yil)' : '🥈 Ustoz PRO (1 oy)';
+    const title = plan === 'VIP' ? '👑 Maktab VIP (1 oy)' : '🥈 Ustoz PRO (1 oy)';
     const limits = plan === 'VIP'
       ? 'Cheksiz sinflar va o\'quvchilar, 15 000 ta daftar, to\'liq maktab tahlili'
       : '6 ta sinf, 200 ta o\'quvchi, 1 000 ta daftar, 100 ta AI test';
@@ -348,9 +348,9 @@ async function handleMessage(msg) {
     if (text.startsWith('/gen vip')) {
       const key = generateKey('VIP');
       await prisma.licenseKey.create({
-        data: { key, plan: 'VIP', durationDays: 365, isUsed: false }
+        data: { key, plan: 'VIP', durationDays: 30, isUsed: false }
       });
-      await sendMessage(chatId, `👑 <b>Yangi Maktab VIP kaliti yaratildi:</b>\n<code>${key}</code>\n⏳ Muddati: 365 kun`);
+      await sendMessage(chatId, `👑 <b>Yangi Maktab VIP kaliti yaratildi:</b>\n<code>${key}</code>\n⏳ Muddati: 30 kun`);
       return;
     }
 
@@ -431,7 +431,7 @@ Ushbu bot orqali siz:
   }
 
   if (text.includes('VIP Kalit') || text === '/vip') {
-    await sendInvoice(chatId, 'VIP', "199 000 so'm", 365);
+    await sendInvoice(chatId, 'VIP', "199 000 so'm", 30);
     return;
   }
 
@@ -571,7 +571,7 @@ async function handleCallback(query) {
   }
 
   if (data === 'buy_vip') {
-    await sendInvoice(chatId, 'VIP', "199 000 so'm", 365);
+    await sendInvoice(chatId, 'VIP', "199 000 so'm", 30);
     return;
   }
 
