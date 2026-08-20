@@ -1,13 +1,20 @@
 const { PrismaClient } = require('@prisma/client');
-const { PrismaLibSql } = require('@prisma/adapter-libsql');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const { Pool } = require('pg');
 const crypto = require('crypto');
 
-const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL || 'file:dev.db' });
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres.hugppvjleywulgpuzaee:293458%40Samar18@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
+const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false }
+});
+
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8803897658:AAFW_YCLcL60RN6kritsD88qdNqyEneXjYI';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
-const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+const APP_URL = process.env.APP_URL || 'https://maktab-ai-two.vercel.app';
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || '7833585964'; // @dasturchi_samar
 
 // Karta ma'lumotlari
