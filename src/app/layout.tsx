@@ -1,14 +1,37 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 import { Toaster } from "react-hot-toast";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata: Metadata = {
-  title: "MaktabAI - O'qituvchilar uchun AI yordamchi",
-  description: "Dars rejasi, testlar yaratish, javoblarni tekshirish va hisobotlar avtomatlashtirilgan.",
+  title: "MaktabAI - O'qituvchilar uchun AI Yordamchi",
+  description: "Daftar va diktant tekshirish, testlar yaratish, dars ishlanmasi va eMaktab integratsiyasi.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon.svg",
+    apple: "/icons/icon.svg",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MaktabAI",
+  },
+  applicationName: "MaktabAI",
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#4f46e5",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -18,7 +41,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="uz" className="light text-base">
-      <body className="text-slate-900 dark:text-slate-100 antialiased h-[100dvh] flex flex-col md:flex-row overflow-hidden app-ambient-bg relative font-sans">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/icons/icon.svg" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#4f46e5" />
+      </head>
+      <body className="text-slate-900 dark:text-slate-100 antialiased h-[100dvh] flex flex-col md:flex-row overflow-hidden app-ambient-bg relative font-sans select-none">
         <AuthProvider>
           <SettingsProvider>
             <Toaster position="top-center" toastOptions={{
@@ -34,6 +66,9 @@ export default function RootLayout({
               </main>
               <BottomNav />
             </div>
+
+            {/* PWA 1-Click Install Modal/Toast */}
+            <PwaInstallPrompt />
           </SettingsProvider>
         </AuthProvider>
       </body>

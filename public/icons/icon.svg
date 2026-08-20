@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e7ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Rounded App Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  
+  <!-- Graduation Cap & AI Sparkles Icon -->
+  <g filter="url(#shadow)">
+    <!-- Graduation Cap Top -->
+    <path d="M256 120 L416 195 L256 270 L96 195 Z" fill="url(#cap)"/>
+    <!-- Cap Under Base -->
+    <path d="M160 236 L160 310 C160 355 352 355 352 310 L352 236 L256 280 Z" fill="#ffffff" opacity="0.9"/>
+    <!-- Tassel -->
+    <path d="M380 200 L380 300 C380 315 395 315 395 300 L395 200" stroke="#fde047" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <circle cx="380" cy="305" r="10" fill="#facc15"/>
+    
+    <!-- AI Sparkle 1 -->
+    <path d="M385 100 Q385 125 410 125 Q385 125 385 150 Q385 125 360 125 Q385 125 385 100 Z" fill="#fde047"/>
+    <!-- AI Sparkle 2 -->
+    <path d="M120 130 Q120 148 138 148 Q120 148 120 166 Q120 148 102 148 Q120 148 120 130 Z" fill="#fde047"/>
+  </g>
+  
+  <!-- "MaktabAI" Modern Text -->
+  <text x="256" y="430" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="52" letter-spacing="2">MaktabAI</text>
+</svg>

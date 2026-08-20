@@ -1,0 +1,50 @@
+{
+  "name": "MaktabAI - O'qituvchilar uchun AI Yordamchi",
+  "short_name": "MaktabAI",
+  "description": "Daftar va diktant tekshirish, AI testlar yaratish va eMaktab integratsiyasi",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Daftar Tekshirish",
+      "short_name": "Tekshirish",
+      "description": "Daftar va diktantlarni AI yordamida tekshirish",
+      "url": "/grader",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI Test Generator",
+      "short_name": "Test",
+      "description": "Yangi testlar yaratish",
+      "url": "/tests",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dars Ishlanmasi",
+      "short_name": "Dars Rejasi",
+      "description": "45 daqiqalik konspekt tayyorlash",
+      "url": "/lesson-planner",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["education", "productivity"]
+}
