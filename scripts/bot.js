@@ -176,15 +176,15 @@ async function sendInvoice(chatId, plan, amount, durationDays) {
 👤 <b>Karta egasi:</b> ${PAYMENT_CARD_HOLDER}
 
 ━━━━━━━━━━━━━━━━━━━━
-📸 <b>TO'LOVNI TASDIQLASH:</b>
+📸 <b>TO'LOVNI YUBORISH:</b>
 1. Kartaga <b>${amount}</b> o'tkazing.
-2. Quyidagi <b>"✅ To'lov qildim (Tasdiqlash)"</b> tugmasini bosing yoki to'lov cheki rasmini to'g'ridan-to'g'ri shu botga yuboring! ⚡
+2. Quyidagi <b>"📸 Chekni ko'rsatish"</b> tugmasini bosing yoki to'lov cheki rasmini to'g'ridan-to'g'ri shu botga yuboring! ⚡
   `;
 
   const keyboard = {
     inline_keyboard: [
       [
-        { text: '✅ To\'lov qildim (Tasdiqlash)', callback_data: 'confirm_paid' }
+        { text: '📸 Chekni ko\'rsatish', callback_data: 'confirm_paid' }
       ],
       [
         { text: '⬅️ Asosiy menyu', callback_data: 'main_menu' }
@@ -616,11 +616,11 @@ async function handleCallback(query) {
 
   if (data === 'confirm_paid') {
     const text = `
-📸 <b>To'lovni tasdiqlash:</b>
+📸 <b>Chekni ko'rsatish (yuborish):</b>
 
-Iltimos, kartaga o'tkazilgan <b>to'lov chekining skrinshotini yoki rasmini</b> to'g'ridan-to'g'ri shu yerga yuboring.
+Iltimos, kartaga o'tkazilgan <b>to'lov chekining skrinshotini yoki rasmini</b> to'g'ridan-to'g'ri shu chatga yuboring.
 
-Chek kelishi bilan adminga yuboriladi va hisobingiz uchun kalit chiqariladi! ⚡
+Chek kelishi bilan adminga yuboriladi va hisobingiz uchun litsenziya kaliti chiqariladi! ⚡
     `;
     await sendMessage(chatId, text.trim());
     return;
