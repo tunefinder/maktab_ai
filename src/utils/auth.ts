@@ -82,8 +82,21 @@ export async function getCurrentUser() {
     if (!session || !session.userId) return null;
 
     try {
-      const user = await db.user.findUnique({
+      // Upsert user into DB so foreign keys in serverless lambdas never fail
+      const user = await db.user.upsert({
         where: { id: session.userId },
+        update: {},
+        create: {
+          id: session.userId,
+          username: session.username || "ustoz",
+          name: session.name || session.username || "Ustoz",
+          email: session.email || null,
+          phone: session.phone || null,
+          role: session.role || "TEACHER",
+          plan: session.plan || "FREE",
+          planExpiresAt: session.planExpiresAt ? new Date(session.planExpiresAt) : null,
+          subject: "Biologiya"
+        },
         select: {
           id: true,
           username: true,
@@ -105,10 +118,10 @@ export async function getCurrentUser() {
 
       if (user) return user;
     } catch (dbErr) {
-      console.warn("DB lookup in getCurrentUser fallback to session payload:", dbErr);
+      console.warn("DB upsert in getCurrentUser fallback to session payload:", dbErr);
     }
 
-    // Fallback to cryptographic session payload if fresh serverless container
+    // Fallback to cryptographic session payload
     return {
       id: session.userId,
       username: session.username || "ustoz",
