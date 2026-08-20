@@ -195,11 +195,45 @@ async function sendInvoice(chatId, plan, amount, durationDays) {
   await sendMessage(chatId, text.trim(), keyboard);
 }
 
-// Grant Free Trial Key (7 Days Free)
+// Grant Free Trial Key (7 Days Free - 1 Time per Telegram Account)
 async function grantTrialKey(chatId) {
-  const key = generateKey('PRO');
-
   try {
+    const existing = await pool.query(
+      'SELECT * FROM "TrialClaim" WHERE "telegramId" = $1',
+      [String(chatId)]
+    );
+
+    if (existing.rows.length > 0) {
+      const prevKey = existing.rows[0].key;
+      const alreadyText = `
+⚠️ <b>DIQQAT: Siz 7 kunlik bepul sinov kalitini allaqachon olgansiz!</b>
+
+🔑 <b>Sizning avvalgi kalitingiz:</b>
+<code>${prevKey}</code>
+
+📌 <i>Har bir Telegram hisobi faqat 1 marta bepul sinov kaliti olishi mumkin.</i>
+
+Agar sinov muddatingiz tugagan bo'lsa, xizmatdan to'liq va cheklovlarsiz foydalanish uchun quyidagi qulay tariflardan birini faollashtiring:
+      `;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🥈 Ustoz PRO Kaliti (49 000 so\'m)', callback_data: 'buy_pro' },
+            { text: '🥇 Maktab VIP Kaliti (199 000 so\'m)', callback_data: 'buy_vip' }
+          ],
+          [
+            { text: '⬅️ Asosiy menyu', callback_data: 'main_menu' }
+          ]
+        ]
+      };
+
+      await sendMessage(chatId, alreadyText.trim(), keyboard);
+      return;
+    }
+
+    const key = generateKey('PRO');
+
     await prisma.licenseKey.create({
       data: {
         key: key,
@@ -209,7 +243,12 @@ async function grantTrialKey(chatId) {
       }
     });
 
-    console.log(`🎁 Yangi 7 kunlik Sinov PRO kaliti berildi: ${key}`);
+    await pool.query(
+      'INSERT INTO "TrialClaim" ("telegramId", "key") VALUES ($1, $2)',
+      [String(chatId), key]
+    );
+
+    console.log(`🎁 Yangi 7 kunlik Sinov PRO kaliti berildi: ${key} -> Chat: ${chatId}`);
 
     const text = `
 🎉 <b>Tabriklaymiz! 7 kunlik Bepul Sinov kalitingiz tayyor!</b>
