@@ -18,8 +18,8 @@ const APP_URL = process.env.APP_URL || 'https://maktab-ai-two.vercel.app';
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || '7833585964'; // @dasturchi_samar
 
 // Karta ma'lumotlari
-let PAYMENT_CARD = process.env.PAYMENT_CARD || '8600 0000 0000 0000';
-let PAYMENT_CARD_HOLDER = process.env.PAYMENT_CARD_HOLDER || 'Novda AI (Samar)';
+let PAYMENT_CARD = process.env.PAYMENT_CARD || '9860 1666 5511 7843';
+let PAYMENT_CARD_HOLDER = process.env.PAYMENT_CARD_HOLDER || 'Samar Dasturchi';
 
 // Buyurtmalar xotirasi (chatId -> order)
 const userOrders = new Map();
