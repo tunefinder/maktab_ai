@@ -149,28 +149,28 @@ async function answerCallbackQuery(callbackQueryId: string, text: string | null 
 async function sendInvoice(chatId: string | number, itemKey: string) {
   let title = "Ustoz PRO";
   let amount = "69 000 so'm";
-  let description = "1 000 ta AI tekshirish, 6 ta sinf, 100 ta dars va test";
+  let description = "500 ta AI tekshirish, 6 ta sinf, 100 ta dars va test";
 
   if (itemKey === 'START') {
     title = "START (30 kun)";
     amount = "39 000 so'm";
-    description = "300 ta AI tekshirish, 2 ta sinf, 40 ta dars, 30 ta test";
+    description = "150 ta AI tekshirish, 2 ta sinf, 40 ta dars, 30 ta test";
   } else if (itemKey === 'PRO') {
     title = "🥈 USTOZ PRO (30 kun) ⭐";
     amount = "69 000 so'm";
-    description = "1 000 ta AI tekshirish, 6 ta sinf, 100 ta dars, 100 ta test";
+    description = "500 ta AI tekshirish, 6 ta sinf, 100 ta dars, 100 ta test";
   } else if (itemKey === 'MAX') {
     title = "💎 USTOZ MAX (30 kun)";
     amount = "119 000 so'm";
-    description = "2 000 ta AI tekshirish, 15 ta sinf, 300 ta dars, 300 ta test";
+    description = "1 000 ta AI tekshirish, 15 ta sinf, 300 ta dars, 300 ta test";
   } else if (itemKey === 'MAKTAB_PRO') {
     title = "🏫 MAKTAB PRO (30 kun)";
     amount = "229 000 so'm";
-    description = "4 000 ta AI tekshirish, 50 ta sinf, 1 000 ta dars va test, 5 ta o'qituvchi";
+    description = "2 200 ta AI tekshirish, 50 ta sinf, 1 000 ta dars va test, 5 ta o'qituvchi";
   } else if (itemKey === 'MAKTAB_VIP') {
     title = "👑 MAKTAB VIP (30 kun)";
     amount = "399 000 so'm";
-    description = "6 500 ta AI tekshirish, Cheksiz sinflar va darslar, 15 ta o'qituvchi";
+    description = "4 000 ta AI tekshirish, Cheksiz sinflar va darslar, 15 ta o'qituvchi";
   } else if (itemKey === 'PACK_500') {
     title = "⚡ AI PACK 500";
     amount = "29 000 so'm";
@@ -274,7 +274,7 @@ Xizmatdan to'liq va cheklovlarsiz foydalanish uchun quyidagi qulay tariflardan b
 <i>(Nusxalash uchun kod ustiga bosing)</i>
 
 ⏳ <b>Amal qilish muddati:</b> 7 kun
-📊 <b>Imkoniyatlar:</b> 1 000 ta AI tekshirish, 6 ta sinf, 100 ta dars va test
+📊 <b>Imkoniyatlar:</b> 500 ta AI tekshirish, 6 ta sinf, 100 ta dars va test
 
 📲 <b>Faollashtirish uchun:</b>
 1. Saytga kiring: <b>${APP_URL}/pricing</b>
@@ -379,31 +379,31 @@ async function sendTariffs(chatId: string | number) {
 🥉 <b>1. START — 39 000 so'm / 30 kun:</b>
 • 1 ta o'qituvchi, 2 ta sinf
 • 40 ta dars, 30 ta test
-• <b>300 ta AI tekshirish</b>
+• <b>150 ta AI tekshirish</b>
 • Oddiy hisobotlar va natijalar
 
 🥈 <b>2. USTOZ PRO — 69 000 so'm / 30 kun (⭐ Eng ommabop):</b>
 • 1 ta o'qituvchi, 6 ta sinf
 • 100 ta dars, 100 ta test
-• <b>1 000 ta AI tekshirish</b>
+• <b>500 ta AI tekshirish</b>
 • Kengaytirilgan hisobotlar, PDF/Excel eksport
 • Ustuvor qo'llab-quvvatlash
 
 💎 <b>3. USTOZ MAX — 119 000 so'm / 30 kun:</b>
 • 2 ta o'qituvchi, 15 ta sinf
 • 300 ta dars, 300 ta test
-• <b>2 000 ta AI tekshirish</b>
+• <b>1 000 ta AI tekshirish</b>
 • To'liq analitika va sinflarni solishtirish
 
 🏫 <b>4. MAKTAB PRO — 229 000 so'm / 30 kun (🏫 Maktablar uchun):</b>
 • 5 ta o'qituvchi, 50 ta sinf
 • 1 000 ta dars, 1 000 ta test
-• <b>4 000 ta AI tekshirish</b>
+• <b>2 200 ta AI tekshirish</b>
 • Maktab dashboardi, sinflar tahlili, to'liq hisobot
 
 👑 <b>5. MAKTAB VIP — 399 000 so'm / 30 kun:</b>
 • 15 ta o'qituvchi, <b>Cheksiz sinf va darslar</b>
-• <b>6 500 ta AI tekshirish</b>
+• <b>4 000 ta AI tekshirish</b>
 • Maktab boshqaruv paneli, 24/7 menejer
 
 ⚡ <b>QO'SHIMCHA AI PAKETLAR:</b>

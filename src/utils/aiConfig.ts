@@ -72,7 +72,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     maxClasses: 2,
     maxLessons: 40,
     maxTests: 30,
-    maxAiCredits: 300,
+    maxAiCredits: 150,
     canExportReports: false,
     hasSchoolRating: false,
     support: 'Standart',
@@ -81,7 +81,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
       '2 ta sinf',
       '40 ta dars',
       '30 ta test',
-      '300 ta AI tekshirish',
+      '150 ta AI tekshirish',
       'Oddiy hisobotlar',
       'Sinflar bo\'yicha natijalar',
       'Standart support'
@@ -101,7 +101,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     maxClasses: 6,
     maxLessons: 100,
     maxTests: 100,
-    maxAiCredits: 1000,
+    maxAiCredits: 500,
     canExportReports: true,
     hasSchoolRating: false,
     support: 'Ustuvor',
@@ -110,7 +110,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
       '6 ta sinf',
       '100 ta dars',
       '100 ta test',
-      '1 000 ta AI tekshirish',
+      '500 ta AI tekshirish',
       'Kengaytirilgan hisobotlar',
       'O\'quvchilar progressi',
       'Natijalarni eksport qilish (PDF/Excel)',
@@ -130,7 +130,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     maxClasses: 15,
     maxLessons: 300,
     maxTests: 300,
-    maxAiCredits: 2000,
+    maxAiCredits: 1000,
     canExportReports: true,
     hasSchoolRating: true,
     support: 'Ustuvor',
@@ -139,7 +139,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
       '15 ta sinf',
       '300 ta dars',
       '300 ta test',
-      '2 000 ta AI tekshirish',
+      '1 000 ta AI tekshirish',
       'To\'liq analitika',
       'Sinflarni solishtirish',
       'O\'quvchi progress tarixi',
@@ -161,7 +161,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     maxClasses: 50,
     maxLessons: 1000,
     maxTests: 1000,
-    maxAiCredits: 4000,
+    maxAiCredits: 2200,
     canExportReports: true,
     hasSchoolRating: true,
     support: 'Priority',
@@ -170,7 +170,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
       '50 ta sinf',
       '1 000 ta dars',
       '1 000 ta test',
-      '4 000 ta AI tekshirish',
+      '2 200 ta AI tekshirish',
       'Maktab dashboardi',
       'O\'qituvchilar statistikasi',
       'Sinflar kesimida analitika',
@@ -192,7 +192,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     maxClasses: -1, // Cheksiz
     maxLessons: -1, // Cheksiz oddiy dars
     maxTests: -1, // Cheksiz oddiy test
-    maxAiCredits: 6500,
+    maxAiCredits: 4000,
     canExportReports: true,
     hasSchoolRating: true,
     support: '24/7 Shaxsiy menejer',
@@ -201,7 +201,7 @@ export const PLANS: Record<PlanType, PlanDetails> = {
       'Cheksiz sinf',
       'Cheksiz oddiy dars',
       'Cheksiz oddiy test',
-      '6 500 ta AI tekshirish',
+      '4 000 ta AI tekshirish',
       'Maktab boshqaruv paneli',
       'Barcha analitika va monitoring',
       'Sinf va o\'quvchi progressi',
@@ -239,8 +239,8 @@ export const AI_CREDIT_COSTS: Record<string, number> = {
   report_generation: Number(process.env.AI_COST_REPORT_GEN || 1) // 1 credit for class performance summary
 };
 
-// Unit financial cost per AI credit in Uzbek Som
-export const AI_COST_PER_CREDIT_UZS = Number(process.env.AI_COST_PER_CREDIT_UZS || 24);
+// Unit financial cost per AI credit in Uzbek Som (Updated to 53 UZS based on real worst-case model token + retry + infra calculation)
+export const AI_COST_PER_CREDIT_UZS = Number(process.env.AI_COST_PER_CREDIT_UZS || 53);
 
 export function getPlanDetails(planKey: string | null | undefined): PlanDetails {
   if (!planKey) return PLANS.FREE;

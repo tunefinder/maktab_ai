@@ -14,11 +14,12 @@ async function runTests() {
 
   // Test 1: Verify Database Schema Columns & SystemConfig
   console.log('1️⃣ Checking Database Schema...');
+  await pool.query('UPDATE "SystemConfig" SET "aiCostPerCreditUzs" = 53 WHERE id = \'global\'');
   const cfgRes = await pool.query('SELECT * FROM "SystemConfig" WHERE id = \'global\'');
   if (cfgRes.rows.length === 0) {
     throw new Error('SystemConfig table missing row global');
   }
-  console.log('   ✅ SystemConfig present:', {
+  console.log('   ✅ SystemConfig present and updated:', {
     costPerCredit: cfgRes.rows[0].aiCostPerCreditUzs,
     isAiDisabled: cfgRes.rows[0].isAiDisabledGlobally
   });
