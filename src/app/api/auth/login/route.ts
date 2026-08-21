@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/utils/db';
-import { verifyPassword, createSessionToken, setAuthCookie } from '@/utils/auth';
+import { 
+  verifyPasswordWithRehash, 
+  hashPassword, 
+  createSessionToken, 
+  setAuthCookie 
+} from '@/utils/auth';
+import { 
+  checkRateLimit, 
+  recordFailedAttempt, 
+  clearRateLimit, 
+  getClientIp 
+} from '@/utils/rateLimit';
 
 export async function POST(req: Request) {
   try {
+    const clientIp = getClientIp(req);
     const body = await req.json();
     const { username, identifier, password } = body;
     const loginId = (username || identifier || '').trim();
@@ -15,7 +27,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // Search by username, phone, or email
+    // 1. Check Rate Limit (IP-based and Identifier-based)
+    const rateLimitKey = `login:${clientIp}:${loginId.toLowerCase()}`;
+    const rateCheck = checkRateLimit(rateLimitKey, 5, 10 * 60 * 1000, 15 * 60 * 1000);
+
+    if (!rateCheck.allowed) {
+      const minutesLeft = Math.ceil(rateCheck.retryAfterSec / 60);
+      return NextResponse.json(
+        { 
+          error: `Ko'p xato urinishlar aniqlandi! Xavfsizlik yuzasidan tizim ${minutesLeft} daqiqaga vaqtincha bloklandi. Iltimos, keyinroq qayta urinib ko'ring.`,
+          retryAfterSec: rateCheck.retryAfterSec,
+          locked: true
+        },
+        { status: 429 }
+      );
+    }
+
+    // 2. Search by username, phone, or email
     const user = await db.user.findFirst({
       where: {
         OR: [
@@ -28,6 +56,7 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json(
         { 
           notFound: true,
@@ -44,15 +73,38 @@ export async function POST(req: Request) {
       );
     }
 
-    const isValid = verifyPassword(password, user.passwordHash);
-    if (!isValid) {
+    // 3. Password verification & automatic security hash upgrade
+    const verification = verifyPasswordWithRehash(password, user.passwordHash);
+    
+    if (!verification.isValid) {
+      const failedRecord = recordFailedAttempt(rateLimitKey);
+      const remainingMsg = failedRecord.remainingAttempts > 0 
+        ? ` (${failedRecord.remainingAttempts} ta urinish qoldi)` 
+        : "";
+
       return NextResponse.json(
-        { error: "Kiritilgan parol noto'g'ri" },
+        { error: `Kiritilgan parol noto'g'ri${remainingMsg}` },
         { status: 400 }
       );
     }
 
-    // Create session token and set cookie
+    // 4. Auto-upgrade legacy hash to PBKDF2 100,000 iterations v2
+    if (verification.needsRehash) {
+      try {
+        const upgradedHash = hashPassword(password);
+        await db.user.update({
+          where: { id: user.id },
+          data: { passwordHash: upgradedHash }
+        });
+      } catch (rehashErr) {
+        console.warn("Failed to auto-upgrade password hash:", rehashErr);
+      }
+    }
+
+    // 5. Successful login -> Clear rate limits
+    clearRateLimit(rateLimitKey);
+
+    // 6. Create session token and set cookie
     const token = createSessionToken({
       userId: user.id,
       username: user.username,

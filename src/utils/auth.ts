@@ -4,22 +4,57 @@ import { db } from './db';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'novda_super_secret_auth_key_2026_education_ai';
 const COOKIE_NAME = 'novda_session_token';
+const DEFAULT_PBKDF2_ITERATIONS = 100000; // OWASP recommended high-security iteration standard
 
-// 1. Password Hashing using PBKDF2
+// 1. Password Hashing using PBKDF2 with 100,000 iterations and SHA-512
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-  return `${salt}:${hash}`;
+  const hash = crypto.pbkdf2Sync(password, salt, DEFAULT_PBKDF2_ITERATIONS, 64, 'sha512').toString('hex');
+  return `v2:${DEFAULT_PBKDF2_ITERATIONS}:${salt}:${hash}`;
+}
+
+export interface PasswordVerificationResult {
+  isValid: boolean;
+  needsRehash: boolean;
 }
 
 export function verifyPassword(password: string, storedHash: string): boolean {
+  return verifyPasswordWithRehash(password, storedHash).isValid;
+}
+
+export function verifyPasswordWithRehash(password: string, storedHash: string): PasswordVerificationResult {
   try {
+    if (!storedHash || !password) return { isValid: false, needsRehash: false };
+
+    // Format v2: "v2:iterations:salt:hash"
+    if (storedHash.startsWith('v2:')) {
+      const parts = storedHash.split(':');
+      if (parts.length !== 4) return { isValid: false, needsRehash: false };
+
+      const iterations = parseInt(parts[1], 10) || DEFAULT_PBKDF2_ITERATIONS;
+      const salt = parts[2];
+      const originalHash = parts[3];
+
+      const hash = crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha512').toString('hex');
+      const isValid = crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex'));
+      const needsRehash = iterations < DEFAULT_PBKDF2_ITERATIONS;
+
+      return { isValid, needsRehash };
+    }
+
+    // Format legacy: "salt:hash" (1,000 iterations)
     const [salt, originalHash] = storedHash.split(':');
-    if (!salt || !originalHash) return false;
+    if (!salt || !originalHash) return { isValid: false, needsRehash: false };
+
     const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex'));
+    const isValid = crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex'));
+
+    return {
+      isValid,
+      needsRehash: isValid // Legacy 1k hashes should be auto-rehashed to 100k
+    };
   } catch {
-    return false;
+    return { isValid: false, needsRehash: false };
   }
 }
 
@@ -64,11 +99,15 @@ export function verifySessionToken(token: string): SessionPayload | null {
 
 export function setAuthCookie(token: string, maxAgeDays = 30): string {
   const maxAge = maxAgeDays * 24 * 60 * 60;
-  return `${COOKIE_NAME}=${token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
+  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  const secureFlag = isProd ? '; Secure' : '';
+  return `${COOKIE_NAME}=${token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secureFlag}`;
 }
 
 export function clearAuthCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  const secureFlag = isProd ? '; Secure' : '';
+  return `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`;
 }
 
 // 3. Get Current Authenticated User from Request / Cookies

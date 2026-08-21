@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/utils/db';
 import { hashPassword, createSessionToken, setAuthCookie } from '@/utils/auth';
+import { checkRateLimit, recordFailedAttempt, getClientIp } from '@/utils/rateLimit';
 
 export async function POST(req: Request) {
   try {
+    const clientIp = getClientIp(req);
+    
+    // Rate limit registration to max 10 per hour per IP
+    const rateCheck = checkRateLimit(`register:${clientIp}`, 10, 60 * 60 * 1000, 60 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Ko'p ro'yxatdan o'tish so'rovlari aniqlandi. Iltimos, keyinroq qayta urinib ko'ring." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const { username, identifier, password, confirmPassword, name, subject, school } = body;
 
@@ -16,16 +28,24 @@ export async function POST(req: Request) {
       );
     }
 
-    if (cleanUsername.length < 3) {
+    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
       return NextResponse.json(
-        { error: "Foydalanuvchi nomi kamida 3 ta belgidan iborat bo'lishi kerak" },
+        { error: "Foydalanuvchi nomi 3 tadan 30 tagacha belgidan iborat bo'lishi kerak" },
         { status: 400 }
       );
     }
 
-    if (!password || password.length < 4) {
+    // Only alphanumeric and underscores/hyphens
+    if (!/^[a-zA-Z0-9_\-\.]+$/.test(cleanUsername)) {
       return NextResponse.json(
-        { error: "Parol kamida 4 ta belgidan iborat bo'lishi kerak" },
+        { error: "Foydalanuvchi nomida faqat lotin harflari, raqamlar va pastki chiziq (_) ishlatilishi mumkin" },
+        { status: 400 }
+      );
+    }
+
+    if (!password || password.length < 6) {
+      return NextResponse.json(
+        { error: "Parol xavfsizlik uchun kamida 6 ta belgidan iborat bo'lishi kerak" },
         { status: 400 }
       );
     }
@@ -49,13 +69,14 @@ export async function POST(req: Request) {
     });
 
     if (existing) {
+      recordFailedAttempt(`register:${clientIp}`);
       return NextResponse.json(
         { error: "Ushbu nom bilan foydalanuvchi allaqachon mavjud. Iltimos, boshqa nom tanlang yoki tizimga kiring." },
         { status: 409 }
       );
     }
 
-    // Create new user
+    // Create new user with high-security 100k iteration hash
     const passwordHash = hashPassword(password);
     const displayName = name?.trim() || cleanUsername;
 

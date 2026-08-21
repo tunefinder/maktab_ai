@@ -22,9 +22,15 @@ import {
   HelpCircle,
   ExternalLink,
   Shield,
+  ShieldCheck,
   Smartphone,
   School,
-  ArrowRight
+  ArrowRight,
+  KeyRound,
+  Lock,
+  X,
+  Mail,
+  Phone
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -47,12 +53,21 @@ export default function SettingsPage() {
 
   const { user, logout, updateProfile } = useAuth();
   
+  // Profile Modal State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempName, setTempName] = useState(user?.name || profileName || "O'qituvchi");
   const [tempSubject, setTempSubject] = useState(user?.subject || "Biologiya");
   const [tempSchool, setTempSchool] = useState(user?.school || "");
   const [tempPhone, setTempPhone] = useState(user?.phone || "");
+  const [tempEmail, setTempEmail] = useState(user?.email || "");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Password Change Modal State
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -60,6 +75,7 @@ export default function SettingsPage() {
       if (user.subject) setTempSubject(user.subject);
       if (user.school) setTempSchool(user.school);
       if (user.phone) setTempPhone(user.phone);
+      if (user.email) setTempEmail(user.email);
     }
   }, [user]);
 
@@ -78,7 +94,8 @@ export default function SettingsPage() {
           name: tempName,
           subject: tempSubject,
           school: tempSchool,
-          phone: tempPhone
+          phone: tempPhone,
+          email: tempEmail
         });
       }
       toast.success("Profil ma'lumotlari muvaffaqiyatli saqlandi!");
@@ -90,43 +107,98 @@ export default function SettingsPage() {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword) {
+      toast.error("Iltimos, barcha maydonlarni to'ldiring");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error("Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Yangi parollar bir-biriga mos kelmadi");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmNewPassword
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Parolni yangilashda xatolik");
+      }
+
+      toast.success("Parolingiz muvaffaqiyatli yangilandi! 🔒");
+      setIsChangePasswordOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (err: any) {
+      toast.error(err.message || "Xatolik yuz berdi");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   const displayName = user?.name || profileName || "Ustoz";
   const userPlan = user?.plan || "FREE";
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-24 animate-in fade-in duration-300">
+    <div className="max-w-4xl mx-auto space-y-8 pb-28 animate-in fade-in duration-300">
       
       {/* Header */}
       <SectionHeader
-        title="Sozlamalar va Profil"
-        subtitle="Shaxsiy ma'lumotlar, tarif obunasi va platforma ko'rinishini boshqaring."
+        title="Sozlamalar va Xavfsizlik"
+        subtitle="Shaxsiy ma'lumotlar, parol xavfsizligi, tarif obunasi va platforma ko'rinishini boshqaring."
       />
 
-      {/* 1. Profile Overview Card */}
+      {/* 1. Profile Overview & Security Card */}
       <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl font-black shadow-md">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl font-black shadow-md shrink-0">
             {displayName.charAt(0).toUpperCase()}
           </div>
-          <div>
+          <div className="space-y-1">
             <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <span>{displayName}</span>
               <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold uppercase">
                 {userPlan}
               </span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Fan: <b>{user?.subject || tempSubject}</b> {user?.school ? `• Maktab: ${user.school}` : ''}
+            <p className="text-xs sm:text-sm text-slate-500">
+              Username: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">@{user?.username || 'ustoz'}</span> • Fan: <b>{user?.subject || tempSubject}</b> {user?.school ? `• ${user.school}` : ''}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => setIsEditingProfile(true)}
-          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all shadow-xs"
-        >
-          Profilni tahrirlash
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={() => setIsEditingProfile(true)}
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all shadow-xs"
+          >
+            Profilni tahrirlash
+          </button>
+          <button
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 border border-indigo-200/60 dark:border-indigo-800"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Parol</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Prominent Subscription & Plan Card */}
@@ -153,7 +225,48 @@ export default function SettingsPage() {
         </Link>
       </div>
 
-      {/* 3. System & UI Settings Grid */}
+      {/* 3. Security & Privacy Overview Card */}
+      <div className="bg-white dark:bg-slate-900 p-6 sm:p-7 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Akkaunt Xavfsizligi
+            </h3>
+            <p className="text-xs text-slate-500">Hisobingiz zamonaviy xavfsizlik protokollari bilan himoyalangan</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1">
+            <div className="text-[11px] text-slate-500">Parol shifrlanishi</div>
+            <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              <span>PBKDF2 (100k)</span>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1">
+            <div className="text-[11px] text-slate-500">Bot va Brute-Force himoya</div>
+            <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              <span>Faol (Anti-Brute)</span>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 space-y-1">
+            <div className="text-[11px] text-slate-500">Sessiya xavfsizligi</div>
+            <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              <span>HMAC SHA-256</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. System & UI Settings Grid */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs divide-y divide-slate-100 dark:divide-slate-800">
         
         {/* Dark Mode */}
@@ -296,11 +409,20 @@ export default function SettingsPage() {
 
       {/* Edit Profile Modal */}
       {isEditingProfile && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <form onSubmit={handleSaveProfile} className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full space-y-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-              Profil ma'lumotlarini tahrirlash
-            </h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <form onSubmit={handleSaveProfile} className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                Profil ma'lumotlarini tahrirlash
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsEditingProfile(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <div>
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Ism va Familiya *</label>
@@ -319,7 +441,7 @@ export default function SettingsPage() {
                 type="text"
                 value={tempSubject}
                 onChange={(e) => setTempSubject(e.target.value)}
-                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold"
               />
             </div>
 
@@ -330,24 +452,126 @@ export default function SettingsPage() {
                 placeholder="Masalan: 45-maktab"
                 value={tempSchool}
                 onChange={(e) => setTempSchool(e.target.value)}
-                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold"
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Telefon raqam</label>
+              <input
+                type="tel"
+                placeholder="+998 90 123 45 67"
+                value={tempPhone}
+                onChange={(e) => setTempPhone(e.target.value)}
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3">
               <button
                 type="button"
                 onClick={() => setIsEditingProfile(false)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
               >
                 Bekor qilish
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-sm"
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm disabled:opacity-50"
               >
                 {isSaving ? "Saqlanmoqda..." : "Saqlash"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <form onSubmit={handleChangePassword} className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 rounded-xl">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Parolni o'zgartirish
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Hisobingiz xavfsizligini ta'minlash uchun kuchli paroldan foydalaning (kamida 6 ta belgi).
+            </p>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Hozirgi parol *
+              </label>
+              <input
+                type="password"
+                placeholder="Eski parolingizni kiriting"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Yangi parol *
+              </label>
+              <input
+                type="password"
+                placeholder="Kamida 6 ta belgi"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                required
+                minLength={6}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Yangi parolni tasdiqlash *
+              </label>
+              <input
+                type="password"
+                placeholder="Yangi parolni qayta kiriting"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                required
+                minLength={6}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordOpen(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>{isChangingPassword ? "Yangilanmoqda..." : "Parolni Yangilash"}</span>
               </button>
             </div>
           </form>
