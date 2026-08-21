@@ -293,6 +293,7 @@ export default function Grader() {
   const handleSaveToDatabase = async () => {
     if (editableResults.length === 0) return;
 
+    const toastId = toast.loading("Natijalar bazaga saqlanmoqda...");
     try {
       const res = await fetch("/api/grader/save", {
         method: "POST",
@@ -305,14 +306,15 @@ export default function Grader() {
         })
       });
 
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         setIsSaved(true);
-        toast.success("Natijalar bazaga va hisobotga muvaffaqiyatli saqlandi!");
+        toast.success(`Natijalar bazaga va hisobotga saqlandi! (${data.count} ta ish)`, { id: toastId });
       } else {
-        toast.error("Saqlashda xatolik yuz berdi");
+        toast.error(data.error || "Saqlashda xatolik yuz berdi", { id: toastId });
       }
     } catch {
-      toast.error("Tarmoq xatosi");
+      toast.error("Tarmoq xatosi yuz berdi", { id: toastId });
     }
   };
 
