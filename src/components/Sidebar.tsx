@@ -126,7 +126,7 @@ export default function Sidebar() {
         
         <div className="p-4 border-t border-white/40 dark:border-slate-700/40 bg-white/30 dark:bg-slate-800/30 backdrop-blur-md">
           {user ? (
-            <Link href="/pricing" className="flex items-center justify-between p-2.5 rounded-2xl bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/60 shadow-xs hover:shadow-sm transition-all group">
+            <Link href="/settings" className="flex items-center justify-between p-2.5 rounded-2xl bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/60 shadow-xs hover:shadow-sm transition-all group">
               <div className="flex items-center gap-2.5 overflow-hidden">
                 <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner group-hover:scale-105 transition-transform shrink-0">
                   <span className="text-xs font-bold text-primary">
