@@ -9,6 +9,7 @@ export function middleware(request: NextRequest) {
   const isPublicRoute =
     pathname === '/login' ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/telegram') ||
     pathname.startsWith('/_next') ||
     pathname.includes('.') ||
     pathname === '/favicon.ico';
