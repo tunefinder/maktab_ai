@@ -34,6 +34,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { fastFetch } from "@/utils/fastFetch";
 import { compressImagesBatch } from "@/utils/imageCompressor";
 import EmaktabExportModal from "@/components/EmaktabExportModal";
+import LimitExceededModal from "@/components/LimitExceededModal";
 import Link from "next/link";
 
 type TaskType = 'TEST' | 'DIKTANT' | 'OPEN_QUESTION';
@@ -41,6 +42,8 @@ type TaskType = 'TEST' | 'DIKTANT' | 'OPEN_QUESTION';
 export default function Grader() {
   const [classes, setClasses] = useState<any[]>([]);
   const [tests, setTests] = useState<any[]>([]);
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+  const [limitErrorMessage, setLimitErrorMessage] = useState("");
   
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedTestId, setSelectedTestId] = useState("");
@@ -173,6 +176,12 @@ export default function Grader() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 403 || data.limitExceeded || data.error?.toLowerCase().includes('limit') || data.error?.toLowerCase().includes('kredit')) {
+          setIsLimitModalOpen(true);
+          setLimitErrorMessage(data.error || "AI funksiyasidan foydalanish uchun limitingiz yetarli emas.");
+          toast.dismiss(toastId);
+          return;
+        }
         throw new Error(data.error || "Tekshirishda xatolik yuz berdi");
       }
 
@@ -609,6 +618,13 @@ export default function Grader() {
           title={tests.find(t => t.id === selectedTestId)?.title || "Daftar tekshiruvi"}
         />
       )}
+
+      {/* Limit Exceeded Modal */}
+      <LimitExceededModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        message={limitErrorMessage}
+      />
 
     </div>
   );

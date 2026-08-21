@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import TestPrintModal from "@/components/TestPrintModal";
+import LimitExceededModal from "@/components/LimitExceededModal";
 
 interface TestQuestion {
   question: string;
@@ -79,6 +80,8 @@ function TestsPageContent() {
   const [aiSelectedClassId, setAiSelectedClassId] = useState("");
   const [aiCustomTitle, setAiCustomTitle] = useState("");
   const [isAiSaving, setIsAiSaving] = useState(false);
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+  const [limitErrorMessage, setLimitErrorMessage] = useState("");
 
   // A4 Print & DTM Sheet Modal
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -211,6 +214,11 @@ function TestsPageContent() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 403 || data.limitExceeded || data.error?.toLowerCase().includes('limit') || data.error?.toLowerCase().includes('kredit')) {
+          setIsLimitModalOpen(true);
+          setLimitErrorMessage(data.error || "AI funksiyasidan foydalanish uchun limitingiz yetarli emas.");
+          return;
+        }
         throw new Error(data.error || "AI test yaratishda xatolik yuz berdi");
       }
 
@@ -750,6 +758,13 @@ function TestsPageContent() {
           questions={printData.questions}
         />
       )}
+
+      {/* Limit Exceeded Modal */}
+      <LimitExceededModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        message={limitErrorMessage}
+      />
 
     </div>
   );

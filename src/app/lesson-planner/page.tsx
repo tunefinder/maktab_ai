@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/Button";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useHistory } from "@/hooks/useHistory";
+import LimitExceededModal from "@/components/LimitExceededModal";
 
 interface LessonPhase {
   phase_name: string;
@@ -87,6 +88,8 @@ export default function LessonPlanner() {
   });
   const [file, setFile] = useState<File | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+  const [limitErrorMessage, setLimitErrorMessage] = useState("");
 
   const { object: streamedResult, submit, isLoading, error } = useObject({
     api: '/api/lesson-planner',
@@ -105,6 +108,11 @@ export default function LessonPlanner() {
        }
     },
     onError: (err) => {
+       if (err.message?.toLowerCase().includes('limit') || err.message?.toLowerCase().includes('kredit')) {
+         setIsLimitModalOpen(true);
+         setLimitErrorMessage(err.message || "AI funksiyasidan foydalanish uchun limitingiz yetarli emas.");
+         return;
+       }
        toast.error(err.message || "Xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
     }
   });
@@ -520,6 +528,13 @@ export default function LessonPlanner() {
 
         </div>
       )}
+
+      {/* Limit Exceeded Modal */}
+      <LimitExceededModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        message={limitErrorMessage}
+      />
 
     </div>
   );

@@ -264,6 +264,7 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
           error: `Sizda yetarli AI limiti mavjud emas! (Kerak: ${totalCost} ta, Qoldiq: ${remainingCredits} ta). Qo'shimcha AI Pack sotib oling yoki tarifingizni oshiring.`,
           requiredCredits: totalCost,
           remainingCredits,
+          limitExceeded: true,
           plan: userPlan
         }),
         { status: 403, headers: { 'Content-Type': 'application/json' } }

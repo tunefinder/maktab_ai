@@ -6,6 +6,7 @@ import { FileSignature, Sparkles, Loader2, Download, CheckCircle2, BookmarkPlus,
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/Button";
+import LimitExceededModal from "@/components/LimitExceededModal";
 
 interface TestQuestion {
   question: string;
@@ -41,6 +42,8 @@ function TestGeneratorContent() {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [customTitle, setCustomTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+  const [limitErrorMessage, setLimitErrorMessage] = useState("");
 
   useEffect(() => {
     if (initialSubject || initialTopic) {
@@ -76,14 +79,22 @@ function TestGeneratorContent() {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error("Xatolik yuz berdi");
-
       const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 403 || data.limitExceeded || data.error?.toLowerCase().includes('limit') || data.error?.toLowerCase().includes('kredit')) {
+          setIsLimitModalOpen(true);
+          setLimitErrorMessage(data.error || "AI funksiyasidan foydalanish uchun limitingiz yetarli emas.");
+          return;
+        }
+        throw new Error(data.error || "Xatolik yuz berdi");
+      }
+
       setResult(data);
       setCustomTitle(`${formData.subject} - ${formData.topic}`);
       toast.success("Test savollari tayyor!");
-    } catch {
-      toast.error("Xatolik yuz berdi. Qayta urinib ko'ring.");
+    } catch (err: any) {
+      toast.error(err.message || "Xatolik yuz berdi. Qayta urinib ko'ring.");
     } finally {
       setLoading(false);
     }
@@ -412,6 +423,14 @@ function TestGeneratorContent() {
           </div>
         </div>
       )}
+
+      {/* Limit Exceeded Modal */}
+      <LimitExceededModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        message={limitErrorMessage}
+      />
+
     </div>
   );
 }
