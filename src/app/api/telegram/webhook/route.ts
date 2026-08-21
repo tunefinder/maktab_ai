@@ -379,7 +379,7 @@ Sizning <b>${title}</b> litsenziya kalitingiz muvaffaqiyatli tayyorlandi:
 
 📲 <b>Faollashtirish bo'yicha yo'riqnoma:</b>
 1. Saytga kiring: <b>${APP_URL}/pricing</b>
-2. <b>"Telegram Bot orqali olingan kalit bormi?"</b> maydoniga ushbu kalitni kiriting.
+2. Sahifaning eng yuqorisidagi <b>"Kalitni faollashtirish"</b> maydoniga ushbu kalitni kiriting.
 3. <b>"Faollashtirish"</b> tugmasini bosing! 🚀
     `;
 
