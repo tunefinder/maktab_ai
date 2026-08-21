@@ -67,31 +67,70 @@ export async function GET() {
     }
 
     // 2. AI Requests & Credit Aggregations
-    const todayLogsCount = await db.aiUsageLog.count({
+    const todayLogs = await db.aiUsageLog.findMany({
       where: {
         createdAt: { gte: startOfToday },
         status: 'SUCCESS'
+      },
+      select: {
+        creditsCost: true,
+        imageCount: true,
+        fallbackUsed: true,
+        durationMs: true,
+        inputTokens: true,
+        outputTokens: true,
+        estimatedCostUzs: true
       }
     });
 
-    const monthLogsCount = await db.aiUsageLog.count({
-      where: {
-        createdAt: { gte: startOfMonth },
-        status: 'SUCCESS'
-      }
-    });
+    const todayAiRequests = todayLogs.length;
+    let todaySheetsGraded = 0;
+    let todayFallbackCount = 0;
+    let todayDurationSum = 0;
 
-    const monthCreditsAgg = await db.aiUsageLog.aggregate({
+    for (const log of todayLogs) {
+      todaySheetsGraded += (log.imageCount || log.creditsCost || 1);
+      if (log.fallbackUsed) todayFallbackCount++;
+      if (log.durationMs) todayDurationSum += log.durationMs;
+    }
+
+    const todayFallbackRatePct = todayAiRequests > 0 ? Math.round((todayFallbackCount / todayAiRequests) * 100) : 0;
+    const avgLatencyMs = todayAiRequests > 0 ? Math.round(todayDurationSum / todayAiRequests) : 0;
+
+    const monthLogs = await db.aiUsageLog.findMany({
       where: {
         createdAt: { gte: startOfMonth },
         status: 'SUCCESS'
       },
-      _sum: {
-        creditsCost: true
+      select: {
+        creditsCost: true,
+        imageCount: true,
+        inputTokens: true,
+        outputTokens: true,
+        estimatedCostUzs: true
       }
     });
 
-    const monthCreditsUsed = monthCreditsAgg._sum.creditsCost || 0;
+    const monthAiRequests = monthLogs.length;
+    let monthSheetsGraded = 0;
+    let monthCreditsUsed = 0;
+    let monthInputTokens = 0;
+    let monthOutputTokens = 0;
+    let monthRealAiCostUzs = 0;
+
+    for (const log of monthLogs) {
+      monthCreditsUsed += log.creditsCost;
+      monthSheetsGraded += (log.imageCount || log.creditsCost || 1);
+      monthInputTokens += (log.inputTokens || 0);
+      monthOutputTokens += (log.outputTokens || 0);
+      monthRealAiCostUzs += (log.estimatedCostUzs || (log.creditsCost * 53));
+    }
+
+    // Real cost per sheet in Uzbek Som
+    const realCostPerSheetUzs = monthSheetsGraded > 0 
+      ? Number((monthRealAiCostUzs / monthSheetsGraded).toFixed(2))
+      : 4.8;
+    const projectedCost1000Sheets = Math.round(realCostPerSheetUzs * 1000);
 
     // Fetch system config
     const systemConfig = await db.systemConfig.findUnique({
@@ -99,9 +138,8 @@ export async function GET() {
     });
 
     const costPerCredit = systemConfig?.aiCostPerCreditUzs || AI_COST_PER_CREDIT_UZS;
-    const estimatedAiCostMonth = Math.round(monthCreditsUsed * costPerCredit);
-    const estimatedGrossProfit = Math.max(0, estimatedMRR - estimatedAiCostMonth);
-    const aiCostToRevenuePct = estimatedMRR > 0 ? Math.min(100, Math.round((estimatedAiCostMonth / estimatedMRR) * 100)) : 0;
+    const estimatedGrossProfit = Math.max(0, estimatedMRR - monthRealAiCostUzs);
+    const aiCostToRevenuePct = estimatedMRR > 0 ? Math.min(100, Math.round((monthRealAiCostUzs / estimatedMRR) * 100)) : 0;
     const arpu = activeSubscriptions > 0 ? Math.round(estimatedMRR / activeSubscriptions) : 0;
 
     // 3. Top AI Users
@@ -134,7 +172,7 @@ export async function GET() {
       };
     });
 
-    // 4. Recent AI logs
+    // 4. Recent AI logs with full telemetry
     const recentLogs = await db.aiUsageLog.findMany({
       take: 15,
       orderBy: { createdAt: 'desc' },
@@ -151,10 +189,20 @@ export async function GET() {
         activeSubscriptions,
         estimatedMRR,
         arpu,
-        todayAiRequests: todayLogsCount,
-        monthAiRequests: monthLogsCount,
+        todayAiRequests,
+        todaySheetsGraded,
+        todayFallbackCount,
+        todayFallbackRatePct,
+        avgLatencyMs,
+        monthAiRequests,
+        monthSheetsGraded,
         monthCreditsUsed,
-        estimatedAiCostMonth,
+        monthInputTokens,
+        monthOutputTokens,
+        monthRealAiCostUzs: Math.round(monthRealAiCostUzs),
+        realCostPerSheetUzs,
+        projectedCost1000Sheets,
+        estimatedAiCostMonth: Math.round(monthRealAiCostUzs),
         costPerCredit,
         estimatedGrossProfit,
         aiCostToRevenuePct,

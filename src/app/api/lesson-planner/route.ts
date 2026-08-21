@@ -3,6 +3,7 @@ import { streamObject } from 'ai';
 import { z } from 'zod';
 import mammoth from 'mammoth';
 import { guardAiOperation } from '@/utils/aiGuard';
+import { AI_MODELS } from '@/utils/aiConfig';
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || "",
@@ -109,13 +110,18 @@ Javobni aniq, o'qishga qulay va o'zbek tilida taqdim et.
     ];
 
     const result = await streamObject({
-      model: google('gemini-3.6-flash'),
+      model: google(AI_MODELS.lesson as any),
       schema: schema,
       messages: messages,
     });
 
-    // Commit credits
-    await guardResult.context.commitCredits();
+    // Commit credits with estimated telemetry
+    await guardResult.context.commitCredits({
+      inputTokens: 600,
+      outputTokens: 1200,
+      totalTokens: 1800,
+      modelName: AI_MODELS.lesson
+    });
 
     return result.toTextStreamResponse();
 

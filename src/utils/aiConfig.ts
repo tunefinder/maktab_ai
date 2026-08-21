@@ -230,7 +230,7 @@ export const AI_PACKS: Record<AiPackType, AiPackDetails> = {
   }
 };
 
-// Unified dynamic AI Operation Credit Costs
+// Unified dynamic AI Operation Credit Costs (in credits charged to user)
 export const AI_CREDIT_COSTS: Record<string, number> = {
   answer_check: Number(process.env.AI_COST_ANSWER_CHECK || 1), // 1 credit per image/answer sheet
   test_generation: Number(process.env.AI_COST_TEST_GEN || 2), // 2 credits per test generation
@@ -239,8 +239,69 @@ export const AI_CREDIT_COSTS: Record<string, number> = {
   report_generation: Number(process.env.AI_COST_REPORT_GEN || 1) // 1 credit for class performance summary
 };
 
-// Unit financial cost per AI credit in Uzbek Som (Updated to 53 UZS based on real worst-case model token + retry + infra calculation)
+// Unit financial cost per AI credit in Uzbek Som (Baseline worst-case)
 export const AI_COST_PER_CREDIT_UZS = Number(process.env.AI_COST_PER_CREDIT_UZS || 53);
+
+// Centralized AI Models Configuration (No hardcoded strings)
+export const AI_MODELS = {
+  testPrimary: process.env.AI_TEST_PRIMARY_MODEL || 'gemini-2.5-flash-lite',
+  testFallback: process.env.AI_TEST_FALLBACK_MODEL || 'gemini-3.6-flash',
+  dictation: process.env.AI_DICTATION_MODEL || 'gemini-3.6-flash',
+  openQuestion: process.env.AI_OPEN_QUESTION_MODEL || 'gemini-3.6-flash',
+  lesson: process.env.AI_LESSON_MODEL || 'gemini-3.6-flash',
+  testGenerator: process.env.AI_TEST_GENERATOR_MODEL || 'gemini-2.5-flash-lite',
+  testGeneratorFallback: process.env.AI_TEST_GEN_FALLBACK_MODEL || 'gemini-3.6-flash'
+};
+
+// Real Model Pricing per 1 Million Tokens (in USD)
+export const AI_PRICING: Record<string, { inputPerMillionUsd: number; outputPerMillionUsd: number }> = {
+  'gemini-2.5-flash-lite': {
+    inputPerMillionUsd: 0.075,
+    outputPerMillionUsd: 0.30
+  },
+  'gemini-3.6-flash': {
+    inputPerMillionUsd: 0.15,
+    outputPerMillionUsd: 0.60
+  },
+  'gemini-flash-latest': {
+    inputPerMillionUsd: 0.15,
+    outputPerMillionUsd: 0.60
+  }
+};
+
+// Real Currency Exchange Rate
+export const USD_UZS_RATE = Number(process.env.USD_UZS_RATE || 11857.35);
+
+// Batch & Concurrency Settings for High-Throughput Grading
+export const AI_BATCH_CONFIG = {
+  batchSize: Math.max(1, Number(process.env.AI_TEST_BATCH_SIZE || 5)),
+  concurrency: Math.max(1, Number(process.env.AI_TEST_CONCURRENCY || 3))
+};
+
+// Next-Gen Pipeline V2 Feature Flag
+export const IS_AI_PIPELINE_V2 = process.env.AI_PIPELINE_V2 !== 'false';
+
+/**
+ * Calculates estimated USD and UZS cost from actual token counts.
+ */
+export function calculateTokenCost(modelName: string, inputTokens = 0, outputTokens = 0): { costUsd: number; costUzs: number } {
+  const normalizedModel = modelName.toLowerCase();
+  let pricing = AI_PRICING['gemini-2.5-flash-lite'];
+
+  if (normalizedModel.includes('3.6') || normalizedModel.includes('pro') || normalizedModel.includes('flash-latest')) {
+    pricing = AI_PRICING['gemini-3.6-flash'];
+  }
+
+  const inputCost = (inputTokens / 1_000_000) * pricing.inputPerMillionUsd;
+  const outputCost = (outputTokens / 1_000_000) * pricing.outputPerMillionUsd;
+  const totalUsd = inputCost + outputCost;
+  const totalUzs = totalUsd * USD_UZS_RATE;
+
+  return {
+    costUsd: Number(totalUsd.toFixed(6)),
+    costUzs: Number(totalUzs.toFixed(2))
+  };
+}
 
 export function getPlanDetails(planKey: string | null | undefined): PlanDetails {
   if (!planKey) return PLANS.FREE;

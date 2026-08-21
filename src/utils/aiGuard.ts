@@ -2,30 +2,42 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from './db';
 import { getCurrentUser } from './auth';
-import { AI_CREDIT_COSTS, getPlanDetails } from './aiConfig';
+import { AI_CREDIT_COSTS, getPlanDetails, calculateTokenCost } from './aiConfig';
 
 // In-memory sliding window rate limiter: userId -> Array of timestamps
 const rateLimitMap = new Map<string, number[]>();
 
-// In-memory idempotency cache: fingerprint -> { result: any, expiresAt: number }
-const idempotencyCache = new Map<string, { result: any; expiresAt: number }>();
+// In-memory hot cache for instant sub-millisecond deduplication: fingerprint -> { result: any, expiresAt: number }
+const memoryIdempotencyCache = new Map<string, { result: any; expiresAt: number }>();
 
-// Cleanup stale cache periodically (every 5 minutes)
+// Cleanup stale memory cache periodically (every 5 minutes)
 if (typeof setInterval !== 'undefined') {
   setInterval(() => {
     const now = Date.now();
-    for (const [key, val] of idempotencyCache.entries()) {
+    for (const [key, val] of memoryIdempotencyCache.entries()) {
       if (val.expiresAt < now) {
-        idempotencyCache.delete(key);
+        memoryIdempotencyCache.delete(key);
       }
     }
   }, 300000);
 }
 
+export interface AiTelemetryData {
+  inputTokens?: number;
+  outputTokens?: number;
+  thinkingTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  fallbackUsed?: boolean;
+  imageCount?: number;
+  modelName?: string;
+}
+
 export interface AiGuardOptions {
   operationType: 'answer_check' | 'test_generation' | 'lesson_generation' | 'text_analysis' | 'report_generation';
   unitsMultiplier?: number; // e.g. number of images / answer sheets for answer_check
-  fingerprintPayload?: any; // object/string used to compute SHA-256 idempotency hash
+  fingerprintPayload?: any; // object/string or image list used to compute SHA-256 hash
+  images?: Array<{ data: string; mimeType?: string }>;
   modelName?: string;
 }
 
@@ -35,20 +47,42 @@ export interface AiGuardContext {
   creditsCost: number;
   remainingCredits: number;
   fingerprint?: string;
-  commitCredits: () => Promise<void>;
-  logFailure: (errorMsg: string) => Promise<void>;
+  commitCredits: (telemetry?: AiTelemetryData) => Promise<void>;
+  logFailure: (errorMsg: string, telemetry?: AiTelemetryData) => Promise<void>;
 }
 
-export function generateFingerprint(userId: string, operationType: string, payload: any): string {
-  const serialized = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
-  return crypto.createHash('sha256').update(`${userId}:${operationType}:${serialized}`).digest('hex');
+/**
+ * Generate robust SHA-256 fingerprint combining userId, operationType, testId, image content hashes, and pipeline version.
+ */
+export function generateRobustFingerprint(
+  userId: string, 
+  operationType: string, 
+  payload: any, 
+  images?: Array<{ data: string }>
+): string {
+  const hash = crypto.createHash('sha256');
+  hash.update(`v2:${userId}:${operationType}`);
+
+  if (payload) {
+    const serialized = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    hash.update(`:payload:${serialized}`);
+  }
+
+  if (images && images.length > 0) {
+    for (let i = 0; i < images.length; i++) {
+      const imgHash = crypto.createHash('sha256').update(images[i].data).digest('hex');
+      hash.update(`:img[${i}]:${imgHash}`);
+    }
+  }
+
+  return hash.digest('hex');
 }
 
 /**
  * Check rate limit for a user.
- * Limit: 12 requests / 60 seconds (burst allowance)
+ * Limit: 20 requests / 60 seconds (burst allowance for batches)
  */
-export function checkRateLimit(userId: string, limit = 12, windowMs = 60000): boolean {
+export function checkRateLimit(userId: string, limit = 20, windowMs = 60000): boolean {
   const now = Date.now();
   const timestamps = rateLimitMap.get(userId) || [];
   const validTimestamps = timestamps.filter(t => now - t < windowMs);
@@ -80,7 +114,7 @@ export async function isAiGloballyDisabled(): Promise<boolean> {
 }
 
 /**
- * Pre-flight guard for AI operations: verifies auth, subscription, global switch, rate limit, and atomic credits.
+ * Pre-flight guard for AI operations: verifies auth, subscription, global switch, rate limit, persistent cache, and atomic credits.
  */
 export async function guardAiOperation(options: AiGuardOptions): Promise<
   | { success: true; context: AiGuardContext; cachedResult?: any }
@@ -124,16 +158,17 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
     };
   }
 
-  // 4. Idempotency Check (Duplicate request prevention)
+  // 4. SHA-256 Fingerprinting & Persistent Cache Check
   let fingerprint: string | undefined;
-  if (options.fingerprintPayload) {
-    fingerprint = generateFingerprint(user.id, options.operationType, options.fingerprintPayload);
-    const cached = idempotencyCache.get(fingerprint);
-    if (cached && cached.expiresAt > Date.now()) {
-      // Return cached result without re-charging credits
+  if (options.fingerprintPayload || (options.images && options.images.length > 0)) {
+    fingerprint = generateRobustFingerprint(user.id, options.operationType, options.fingerprintPayload, options.images);
+    
+    // Check Tier 1: Memory Cache
+    const memCached = memoryIdempotencyCache.get(fingerprint);
+    if (memCached && memCached.expiresAt > Date.now()) {
       return {
         success: true,
-        cachedResult: cached.result,
+        cachedResult: memCached.result,
         context: {
           userId: user.id,
           userPlan: user.plan || 'FREE',
@@ -144,6 +179,34 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
           logFailure: async () => {}
         }
       };
+    }
+
+    // Check Tier 2: Persistent Database Cache
+    try {
+      const dbCached = await db.aiResponseCache.findUnique({
+        where: { fingerprint }
+      });
+      if (dbCached && new Date(dbCached.expiresAt) > new Date()) {
+        memoryIdempotencyCache.set(fingerprint, {
+          result: dbCached.response,
+          expiresAt: new Date(dbCached.expiresAt).getTime()
+        });
+        return {
+          success: true,
+          cachedResult: dbCached.response,
+          context: {
+            userId: user.id,
+            userPlan: user.plan || 'FREE',
+            creditsCost: 0,
+            remainingCredits: 0,
+            fingerprint,
+            commitCredits: async () => {},
+            logFailure: async () => {}
+          }
+        };
+      }
+    } catch {
+      // Non-blocking fallback
     }
   }
 
@@ -215,7 +278,11 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
     creditsCost: totalCost,
     remainingCredits: remainingCredits - totalCost,
     fingerprint,
-    commitCredits: async () => {
+    commitCredits: async (telemetry?: AiTelemetryData) => {
+      // Calculate token cost
+      const model = telemetry?.modelName || options.modelName || 'gemini-2.5-flash-lite';
+      const cost = calculateTokenCost(model, telemetry?.inputTokens || 0, telemetry?.outputTokens || 0);
+
       // Atomic increment in DB
       await db.user.update({
         where: { id: dbUser.id },
@@ -225,28 +292,40 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
         }
       });
 
-      // Log success in AiUsageLog
+      // Log success in AiUsageLog with comprehensive telemetry
       await db.aiUsageLog.create({
         data: {
           userId: dbUser.id,
           operationType: options.operationType,
           creditsCost: totalCost,
-          model: options.modelName || 'gemini-3.6-flash',
+          model,
           fingerprint: fingerprint || null,
-          status: 'SUCCESS'
+          status: 'SUCCESS',
+          inputTokens: telemetry?.inputTokens || null,
+          outputTokens: telemetry?.outputTokens || null,
+          thinkingTokens: telemetry?.thinkingTokens || null,
+          totalTokens: telemetry?.totalTokens || ((telemetry?.inputTokens || 0) + (telemetry?.outputTokens || 0)) || null,
+          fallbackUsed: telemetry?.fallbackUsed || false,
+          durationMs: telemetry?.durationMs || null,
+          imageCount: telemetry?.imageCount || options.unitsMultiplier || 1,
+          estimatedCostUsd: cost.costUsd,
+          estimatedCostUzs: cost.costUzs
         }
       });
     },
-    logFailure: async (errorMsg: string) => {
+    logFailure: async (errorMsg: string, telemetry?: AiTelemetryData) => {
+      const model = telemetry?.modelName || options.modelName || 'gemini-2.5-flash-lite';
       await db.aiUsageLog.create({
         data: {
           userId: dbUser.id,
           operationType: options.operationType,
           creditsCost: 0,
-          model: options.modelName || 'gemini-3.6-flash',
+          model,
           fingerprint: fingerprint || null,
           status: 'FAILED',
-          errorMessage: errorMsg.slice(0, 500)
+          errorMessage: errorMsg.slice(0, 500),
+          durationMs: telemetry?.durationMs || null,
+          imageCount: telemetry?.imageCount || options.unitsMultiplier || 1
         }
       });
     }
@@ -256,12 +335,34 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
 }
 
 /**
- * Saves a completed result to the idempotency cache for 60 seconds.
+ * Saves a completed result to both memory and database cache for persistent multi-instance performance.
  */
-export function cacheAiResult(fingerprint: string | undefined, result: any, ttlSeconds = 60): void {
+export async function cacheAiResult(fingerprint: string | undefined, result: any, ttlSeconds = 120): Promise<void> {
   if (!fingerprint) return;
-  idempotencyCache.set(fingerprint, {
+
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+  // 1. Save in memory
+  memoryIdempotencyCache.set(fingerprint, {
     result,
-    expiresAt: Date.now() + ttlSeconds * 1000
+    expiresAt: expiresAt.getTime()
   });
+
+  // 2. Save in database
+  try {
+    await db.aiResponseCache.upsert({
+      where: { fingerprint },
+      update: {
+        response: result,
+        expiresAt
+      },
+      create: {
+        fingerprint,
+        response: result,
+        expiresAt
+      }
+    });
+  } catch (err) {
+    console.warn("Persistent cache upsert warning:", err);
+  }
 }

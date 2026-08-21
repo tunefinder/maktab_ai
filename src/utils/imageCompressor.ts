@@ -4,10 +4,18 @@
  * Keeps text & handwriting 100% sharp for AI OCR vision.
  */
 
+const DEFAULT_MAX_DIMENSION = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_AI_IMAGE_MAX_DIMENSION 
+  ? Number(process.env.NEXT_PUBLIC_AI_IMAGE_MAX_DIMENSION) 
+  : 1400;
+
+const DEFAULT_QUALITY = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_AI_IMAGE_QUALITY 
+  ? Number(process.env.NEXT_PUBLIC_AI_IMAGE_QUALITY) 
+  : 0.82;
+
 export async function compressImage(
   file: File, 
-  maxDimension = 1400, 
-  quality = 0.85
+  maxDimension = DEFAULT_MAX_DIMENSION, 
+  quality = DEFAULT_QUALITY
 ): Promise<{ data: string; mimeType: string; sizeKb: number }> {
   return new Promise((resolve, reject) => {
     // If not an image, fallback to standard FileReader

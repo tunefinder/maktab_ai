@@ -149,25 +149,49 @@ model TrialClaim {
 }
 
 model AiUsageLog {
-  id            String    @id @default(uuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  operationType String    // "answer_check" | "test_generation" | "lesson_generation" | "text_analysis" | "report_generation"
-  creditsCost   Int
-  model         String?
-  fingerprint   String?
-  status        String    @default("SUCCESS") // "SUCCESS" | "FAILED" | "CACHED"
-  errorMessage  String?
-  createdAt     DateTime  @default(now())
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationType    String    // "answer_check" | "test_generation" | "lesson_generation" | "text_analysis" | "report_generation"
+  creditsCost      Int
+  model            String?
+  fingerprint      String?
+  status           String    @default("SUCCESS") // "SUCCESS" | "FAILED" | "CACHED"
+  errorMessage     String?
+  
+  // Advanced token & latency telemetry
+  inputTokens      Int?
+  outputTokens     Int?
+  thinkingTokens   Int?
+  totalTokens      Int?
+  requestCount     Int       @default(1)
+  fallbackUsed     Boolean   @default(false)
+  durationMs       Int?
+  imageCount       Int?
+  estimatedCostUsd Float?
+  estimatedCostUzs Float?
+  
+  createdAt        DateTime  @default(now())
 
   @@index([userId, createdAt])
   @@index([fingerprint])
+  @@index([createdAt])
+}
+
+model AiResponseCache {
+  id          String   @id @default(uuid())
+  fingerprint String   @unique
+  response    Json
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 model SystemConfig {
   id                   String    @id @default("global")
   isAiDisabledGlobally Boolean   @default(false)
-  aiCostPerCreditUzs   Float     @default(24)
+  aiCostPerCreditUzs   Float     @default(53)
   paymentCard          String    @default("9860 1666 5511 7843")
   paymentCardHolder    String    @default("Samar Dasturchi")
   updatedAt            DateTime  @updatedAt

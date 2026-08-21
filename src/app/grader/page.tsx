@@ -28,9 +28,6 @@ import {
   Plus
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { experimental_useObject as useObject } from '@ai-sdk/react';
-import { z } from 'zod';
-
 import { Button } from "@/components/ui/Button";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -38,53 +35,6 @@ import { fastFetch } from "@/utils/fastFetch";
 import { compressImagesBatch } from "@/utils/imageCompressor";
 import EmaktabExportModal from "@/components/EmaktabExportModal";
 import Link from "next/link";
-
-// Dynamic schema supporting Test, Dictation, and Open Question
-const dynamicSchema = z.object({
-  taskType: z.string().optional(),
-  results: z.array(
-    z.object({
-      student_name: z.string(),
-      variant: z.string().optional(),
-      score: z.number(),
-      maxScore: z.number().optional(),
-      percentage: z.number(),
-      feedback: z.string().optional(),
-      confidence: z.number().optional(),
-      needsReview: z.boolean().optional(),
-      spellingErrorsCount: z.number().optional(),
-      punctuationErrorsCount: z.number().optional(),
-      missingWordsCount: z.number().optional(),
-      extraWordsCount: z.number().optional(),
-      extractedAnswerText: z.string().optional(),
-      errorsList: z.array(
-        z.object({
-          type: z.string(),
-          original: z.string(),
-          written: z.string(),
-          explanation: z.string()
-        })
-      ).optional(),
-      criteriaBreakdown: z.array(
-        z.object({
-          criterion: z.string(),
-          awardedPoints: z.number(),
-          maxPoints: z.number(),
-          feedback: z.string()
-        })
-      ).optional(),
-      answers: z.array(
-        z.object({
-          question: z.number(),
-          studentAnswer: z.string(),
-          correctAnswer: z.string(),
-          isCorrect: z.boolean(),
-          confidence: z.number()
-        })
-      ).optional()
-    })
-  )
-});
 
 type TaskType = 'TEST' | 'DIKTANT' | 'OPEN_QUESTION';
 
@@ -116,6 +66,8 @@ export default function Grader() {
   // Saved Results State
   const [editableResults, setEditableResults] = useState<any[]>([]);
   const [isSaved, setIsSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<any>(null);
 
   // Fetch initial classes and tests
   useEffect(() => {
@@ -133,20 +85,6 @@ export default function Grader() {
       }
     }).catch(() => {});
   }, []);
-
-  const { object: streamedResult, submit, isLoading, error } = useObject({
-    api: '/api/grader',
-    schema: dynamicSchema,
-    onFinish: ({ object }) => {
-      if (object && object.results) {
-        setEditableResults(object.results);
-        toast.success(`AI ${object.results.length} nafar o'quvchi daftarini tekshirdi!`);
-      }
-    },
-    onError: (err) => {
-      toast.error(err.message || "Tekshirishda xatolik yuz berdi");
-    }
-  });
 
   // Handle Multi Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,8 +109,8 @@ export default function Grader() {
     setSelectedImages(prev => prev.filter((_, idx) => idx !== index));
   };
 
-  // Start AI Grader Process
-  const handleStartGrading = () => {
+  // Start AI Grader Process with Next-Gen High-Speed Pipeline
+  const handleStartGrading = async () => {
     if (!selectedClassId) {
       toast.error("Iltimos, avval sinfni tanlang");
       return;
@@ -221,7 +159,35 @@ export default function Grader() {
 
     setIsSaved(false);
     setEditableResults([]);
-    submit(payload);
+    setIsLoading(true);
+    setError(null);
+    const toastId = toast.loading(`AI ${selectedImages.length} ta daftarni tekshirmoqda...`);
+
+    try {
+      const res = await fetch('/api/grader', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Tekshirishda xatolik yuz berdi");
+      }
+
+      if (data.results && Array.isArray(data.results)) {
+        setEditableResults(data.results);
+        toast.success(`AI ${data.results.length} nafar o'quvchi daftarini tekshirdi!`, { id: toastId });
+      } else {
+        throw new Error("Natija formati noto'g'ri qaytdi");
+      }
+    } catch (err: any) {
+      setError(err);
+      toast.error(err.message || "Tekshirishda xatolik", { id: toastId });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Save Results to Database
@@ -251,7 +217,7 @@ export default function Grader() {
     }
   };
 
-  const activeResults = editableResults.length > 0 ? editableResults : (streamedResult?.results || []);
+  const activeResults = editableResults;
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-24 animate-in fade-in duration-300">

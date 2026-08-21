@@ -1,127 +1,343 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { streamObject } from 'ai';
-import { z } from 'zod';
+import { NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 import { db } from '@/utils/db';
 import { getCurrentUser } from '@/utils/auth';
-import { guardAiOperation } from '@/utils/aiGuard';
-
-const google = createGoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
-});
+import { 
+  guardAiOperation, 
+  cacheAiResult, 
+  AiTelemetryData 
+} from '@/utils/aiGuard';
+import { 
+  AI_MODELS, 
+  AI_BATCH_CONFIG, 
+  IS_AI_PIPELINE_V2,
+  calculateTokenCost 
+} from '@/utils/aiConfig';
 
 export const maxDuration = 60;
 
-const testSchema = z.object({
-  taskType: z.literal('TEST').default('TEST'),
-  results: z.array(
-    z.object({
-      student_name: z.string(),
-      variant: z.string().optional(),
-      score: z.number().describe("To'g'ri topilgan savollar soni"),
-      maxScore: z.number().default(100),
-      percentage: z.number().describe("Foiz ko'rinishida, masalan 85"),
-      feedback: z.string().optional(),
-      confidence: z.number().describe("Ishonch darajasi 0.0 dan 1.0 gacha"),
-      needsReview: z.boolean().default(false),
-      answers: z.array(
-        z.object({
-          question: z.number().describe("Savol raqami"),
-          studentAnswer: z.string().describe("O'quvchi belgilagan javob (A, B, C, D) yoki '-'"),
-          correctAnswer: z.string().describe("Kalitdagi to'g'ri javob"),
-          isCorrect: z.boolean(),
-          confidence: z.number().describe("Ishonch darajasi 0.0 dan 1.0 gacha")
-        })
-      )
-    })
-  )
-});
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const dictationSchema = z.object({
-  taskType: z.literal('DICTATION').default('DICTATION'),
-  results: z.array(
-    z.object({
-      student_name: z.string(),
-      score: z.number().describe("O'quvchining yakuniy bali"),
-      maxScore: z.number().describe("Maksimal ball"),
-      percentage: z.number().describe("Foiz ko'rinishida"),
-      spellingErrorsCount: z.number().describe("Imlo xatolari soni"),
-      punctuationErrorsCount: z.number().describe("Tinish belgisi xatolari soni"),
-      missingWordsCount: z.number().describe("Tushib qolgan so'zlar soni"),
-      extraWordsCount: z.number().describe("Ortiqcha qo'shilgan so'zlar soni"),
-      errorsList: z.array(
-        z.object({
-          type: z.string().describe("Xatolik turi: IMLO, TINISH, TUSHIB_QOLGAN, ORTIQCHA"),
-          original: z.string().describe("Original matndagi to'g'ri so'z yoki belgi"),
-          written: z.string().describe("O'quvchi yozgan matn yoki belgi"),
-          explanation: z.string().describe("Xatolik sababi va qoidasi")
-        })
-      ),
-      feedback: z.string().describe("O'quvchi uchun tushunarli pedagogik izoh"),
-      confidence: z.number().describe("AI ishonch darajasi 0.0 - 1.0"),
-      needsReview: z.boolean().describe("Agar yozuv xira yoki shubhali bo'lsa true")
-    })
-  )
-});
+/**
+ * Helper to parse various answer key formats into a clean array of upper-case letters:
+ * e.g. "ABCDABCDAB" -> ["A","B","C","D","A","B","C","D","A","B"]
+ * e.g. "1A 2B 3C 4D" -> ["A","B","C","D"]
+ * e.g. '{"1":"A","2":"B"}' -> ["A","B"]
+ */
+function parseAnswerKeyToArray(rawKey: string | null | undefined, expectedCount = 20): string[] {
+  if (!rawKey) {
+    return Array.from({ length: expectedCount }, () => 'A');
+  }
 
-const openQuestionSchema = z.object({
-  taskType: z.literal('OPEN_QUESTION').default('OPEN_QUESTION'),
-  results: z.array(
-    z.object({
-      student_name: z.string(),
-      score: z.number().describe("Olingan ball"),
-      maxScore: z.number().describe("Maksimal ball"),
-      percentage: z.number().describe("Foiz ko'rinishida"),
-      extractedAnswerText: z.string().describe("O'quvchining daftardagi javob matni"),
-      criteriaBreakdown: z.array(
-        z.object({
-          criterion: z.string().describe("Mezon nomi"),
-          awardedPoints: z.number().describe("Berilgan ball"),
-          maxPoints: z.number().describe("Mezon maksimal bali"),
-          feedback: z.string().describe("Mezon bo'yicha tahlil")
-        })
-      ),
-      feedback: z.string().describe("Umumiy pedagogik xulosa"),
-      confidence: z.number().describe("0.0 dan 1.0 gacha"),
-      needsReview: z.boolean().describe("O'qituvchi alohida ko'rib chiqishi shartmi")
-    })
-  )
-});
+  const trimmed = rawKey.trim();
+
+  // 1. JSON format
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const res: string[] = [];
+      for (let i = 1; i <= expectedCount; i++) {
+        res.push((parsed[String(i)] || parsed[i] || 'A').toUpperCase());
+      }
+      return res;
+    } catch {}
+  }
+
+  // 2. Numbered format: "1A 2B 3C" or "1.A 2.B"
+  const numberedMatches = trimmed.match(/\b\d+[\.\-\:]?\s*([A-Za-z])/g);
+  if (numberedMatches && numberedMatches.length >= 2) {
+    const res: string[] = [];
+    for (const match of numberedMatches) {
+      const letterMatch = match.match(/[A-Za-z]$/);
+      if (letterMatch) res.push(letterMatch[0].toUpperCase());
+    }
+    return res.length > 0 ? res : Array.from({ length: expectedCount }, () => 'A');
+  }
+
+  // 3. Continuous letters format: "ABCDABCDAB..."
+  const cleanLetters = trimmed.replace(/[^A-Za-z]/g, '').toUpperCase();
+  if (cleanLetters.length > 0) {
+    return cleanLetters.split('');
+  }
+
+  return Array.from({ length: expectedCount }, () => 'A');
+}
+
+/**
+ * Executes zero-thinking Flash-Lite extraction on a single batch of student answer sheets.
+ */
+async function extractStudentAnswersWithFlashLite(
+  images: Array<{ data: string; mimeType?: string }>,
+  questionCount: number
+): Promise<{
+  results: Array<{
+    student_name: string;
+    variant: string;
+    answers: string[];
+    uncertainQuestions: number[];
+    confidence: number;
+    needsReview: boolean;
+  }>;
+  inputTokens: number;
+  outputTokens: number;
+}> {
+  const prompt = `
+Senga o'quvchilar tomonidan qo'lda to'ldirilgan ${images.length} ta test javob varaqasi rasmlari taqdim etilgan.
+
+VAZIFANG:
+Har bir rasmdan FAQAT quyidagilarni aniq o'qib, JSON formatida chiqar:
+1. student_name: O'quvchining ism-sharifi (agar daftarda ko'rinmasa "Noma'lum o'quvchi").
+2. variant: Belgilangan variant (masalan "A", "B", "1", "2"). Agar yo'q bo'lsa "A".
+3. answers: 1-savoldan ${questionCount}-savolgacha belgilangan harflar massivi (FAQAT "A", "B", "C", "D" yoki belgilanmagan/o'chirilgan bo'lsa "-").
+4. uncertainQuestions: Noaniq, xira yoki ikkita variant belgilangan savol raqamlari massivi (masalan [7, 14]).
+5. confidence: O'qishning umumiy aniqligi (0.0 dan 1.0 gacha).
+6. needsReview: Agar yozuv juda xira, yirtilgan yoki shubhali bo'lsa true, aks holda false.
+
+QAT'IY QOIDA:
+Hech qanday ball hisoblama, foiz hisoblama, to'g'ri javobni solishtirma. Faqat rasmdagi harflarni o'qi.
+
+Struktura:
+{
+  "results": [
+    {
+      "student_name": "Ali Valiyev",
+      "variant": "A",
+      "answers": ["A", "B", "C", "D"],
+      "uncertainQuestions": [],
+      "confidence": 0.96,
+      "needsReview": false
+    }
+  ]
+}
+  `.trim();
+
+  const contents: any[] = [{ text: prompt }];
+
+  for (const img of images) {
+    contents.push({
+      inlineData: {
+        data: img.data,
+        mimeType: img.mimeType || 'image/jpeg'
+      }
+    });
+  }
+
+  // Call gemini-2.5-flash-lite with thinkingBudget: 0 for zero reasoning latency
+  const response = await genAI.models.generateContent({
+    model: AI_MODELS.testPrimary,
+    contents,
+    config: {
+      responseMimeType: "application/json",
+      thinkingConfig: {
+        thinkingBudget: 0
+      }
+    }
+  });
+
+  const text = response.text || "";
+  const parsed = JSON.parse(text);
+
+  const usage = response.usageMetadata || {};
+  const inputTokens = usage.promptTokenCount || (images.length * 350);
+  const outputTokens = usage.candidatesTokenCount || (images.length * 40);
+
+  return {
+    results: Array.isArray(parsed.results) ? parsed.results : [],
+    inputTokens,
+    outputTokens
+  };
+}
+
+/**
+ * Strong Fallback: Runs on a single problematic sheet using strong model (gemini-3.6-flash).
+ */
+async function fallbackSingleStudentExtraction(
+  img: { data: string; mimeType?: string },
+  questionCount: number
+): Promise<{
+  result: {
+    student_name: string;
+    variant: string;
+    answers: string[];
+    uncertainQuestions: number[];
+    confidence: number;
+    needsReview: boolean;
+  };
+  inputTokens: number;
+  outputTokens: number;
+}> {
+  const prompt = `
+DIQQAT: Ushbu test javob varaqasi rasmi juda sinchkovlik bilan qayta tekshirilmoqda.
+Rasmdan o'quvchi ism-sharifi, varianti va 1 dan ${questionCount}-savolgacha belgilangan barcha javoblarini (A, B, C, D yoki -) aniq o'qi.
+
+Format:
+{
+  "student_name": "Ism Familiya",
+  "variant": "A",
+  "answers": ["A", "B", ...],
+  "uncertainQuestions": [],
+  "confidence": 0.95,
+  "needsReview": false
+}
+  `.trim();
+
+  const response = await genAI.models.generateContent({
+    model: AI_MODELS.testFallback,
+    contents: [
+      { text: prompt },
+      {
+        inlineData: {
+          data: img.data,
+          mimeType: img.mimeType || 'image/jpeg'
+        }
+      }
+    ],
+    config: {
+      responseMimeType: "application/json"
+    }
+  });
+
+  const text = response.text || "{}";
+  const parsed = JSON.parse(text);
+  const usage = response.usageMetadata || {};
+
+  return {
+    result: {
+      student_name: parsed.student_name || "Noma'lum o'quvchi",
+      variant: parsed.variant || "A",
+      answers: Array.isArray(parsed.answers) ? parsed.answers : Array.from({ length: questionCount }, () => '-'),
+      uncertainQuestions: Array.isArray(parsed.uncertainQuestions) ? parsed.uncertainQuestions : [],
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+      needsReview: Boolean(parsed.needsReview)
+    },
+    inputTokens: usage.promptTokenCount || 400,
+    outputTokens: usage.candidatesTokenCount || 50
+  };
+}
+
+/**
+ * Pure TypeScript Scoring Engine: Instant, 100% deterministic, zero token cost.
+ */
+function scoreStudentSheet(
+  extracted: {
+    student_name: string;
+    variant: string;
+    answers: string[];
+    uncertainQuestions?: number[];
+    confidence?: number;
+    needsReview?: boolean;
+  },
+  answerKeys: string[],
+  questionCount: number
+) {
+  let correctCount = 0;
+  let incorrectCount = 0;
+  let unansweredCount = 0;
+
+  const answersList: Array<{
+    question: number;
+    studentAnswer: string;
+    correctAnswer: string;
+    isCorrect: boolean;
+    confidence: number;
+  }> = [];
+
+  for (let i = 0; i < questionCount; i++) {
+    const rawStudent = extracted.answers[i] ? extracted.answers[i].toUpperCase().trim() : '-';
+    const studentAns = ['A', 'B', 'C', 'D'].includes(rawStudent) ? rawStudent : '-';
+    const correctAns = answerKeys[i] || 'A';
+
+    const isUncertain = extracted.uncertainQuestions?.includes(i + 1);
+    const confidence = isUncertain ? 0.6 : (extracted.confidence || 0.95);
+
+    if (studentAns === '-') {
+      unansweredCount++;
+      answersList.push({
+        question: i + 1,
+        studentAnswer: '-',
+        correctAnswer: correctAns,
+        isCorrect: false,
+        confidence: 0.95
+      });
+    } else if (studentAns === correctAns) {
+      correctCount++;
+      answersList.push({
+        question: i + 1,
+        studentAnswer: studentAns,
+        correctAnswer: correctAns,
+        isCorrect: true,
+        confidence
+      });
+    } else {
+      incorrectCount++;
+      answersList.push({
+        question: i + 1,
+        studentAnswer: studentAns,
+        correctAnswer: correctAns,
+        isCorrect: false,
+        confidence
+      });
+    }
+  }
+
+  const score = correctCount;
+  const maxScore = questionCount;
+  const percentage = Math.round((correctCount / questionCount) * 100);
+
+  return {
+    student_name: extracted.student_name || "Noma'lum o'quvchi",
+    variant: extracted.variant || "A",
+    score,
+    maxScore,
+    percentage,
+    correctCount,
+    incorrectCount,
+    unansweredCount,
+    feedback: `${questionCount} ta savoldan ${correctCount} ta to'g'ri topildi (${percentage}%).`,
+    confidence: extracted.confidence || 0.95,
+    needsReview: extracted.needsReview || extracted.confidence! < 0.85 || false,
+    answers: answersList
+  };
+}
 
 export async function POST(request: Request) {
+  const startTime = Date.now();
+
   try {
     const body = await request.json();
     const { 
       taskType = 'TEST', 
       testId, 
-      answerKey, 
-      questionCount, 
-      originalText,
-      sourceImage,
-      questionText,
-      rubricRules,
-      maxScore = 20,
-      spellingPenalty = 1,
-      punctuationPenalty = 0.5,
-      images 
+      classId,
+      images, 
+      dictation, 
+      openQuestion,
+      // Backward compatibility fields
+      answerKey: clientAnswerKey,
+      originalText: clientOriginalText,
+      questionText: clientQuestionText,
+      maxScore: clientMaxScore
     } = body;
 
-    if (!images || images.length === 0) {
-      return new Response(JSON.stringify({ error: "Kamida 1 ta rasm yuklanishi kerak" }), { status: 400 });
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return NextResponse.json({ error: "Kamida 1 ta rasm yuklanishi kerak" }, { status: 400 });
     }
 
     const opType = (taskType === 'DIKTANT' || taskType === 'DICTATION' || taskType === 'OPEN_QUESTION' || taskType === 'ESSAY')
       ? 'text_analysis'
       : 'answer_check';
 
+    // 1. Security & Pre-flight Guardrails (Authentication, Limit, Rate limiting, SHA-256 Idempotency)
     const guardResult = await guardAiOperation({
       operationType: opType,
       unitsMultiplier: images.length,
-      modelName: 'gemini-3.6-flash',
+      images,
       fingerprintPayload: {
         taskType,
         testId,
+        classId,
         imgCount: images.length,
-        textKey: (answerKey || originalText || questionText || '').slice(0, 100)
+        pipelineVersion: 'v2'
       }
     });
 
@@ -129,118 +345,289 @@ export async function POST(request: Request) {
       return guardResult.response;
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "API kalit o'rnatilmagan" }), { status: 500 });
+    // Return instant persistent cache if exact same request
+    if (guardResult.cachedResult) {
+      return NextResponse.json(guardResult.cachedResult);
     }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json({ error: "GEMINI_API_KEY o'rnatilmagan" }, { status: 500 });
+    }
+
+    // =========================================================================
+    // BRANCH A: HIGH-SPEED, ULTRA-CHEAP ABCD TEST PIPELINE (5x–10x Cost Reduction)
+    // =========================================================================
+    if (taskType === 'TEST') {
+      let answerKeys: string[] = [];
+      let questionCount = 20;
+
+      // Authenticate test from DB
+      if (testId) {
+        const dbTest = await db.test.findUnique({
+          where: { id: testId }
+        });
+
+        if (!dbTest) {
+          return NextResponse.json({ error: "Ko'rsatilgan test topilmadi" }, { status: 404 });
+        }
+
+        // Verify ownership if test has userId
+        if (dbTest.userId && dbTest.userId !== guardResult.context.userId) {
+          return NextResponse.json({ error: "Ushbu testdan foydalanishga ruxsat yo'q" }, { status: 403 });
+        }
+
+        questionCount = dbTest.questionCount || 20;
+        answerKeys = parseAnswerKeyToArray(dbTest.answerKey, questionCount);
+      } else {
+        answerKeys = parseAnswerKeyToArray(clientAnswerKey, questionCount);
+      }
+
+      // Chunk images into batches of AI_BATCH_CONFIG.batchSize (default 5)
+      const batchSize = AI_BATCH_CONFIG.batchSize;
+      const chunks: Array<Array<{ data: string; mimeType?: string }>> = [];
+      for (let i = 0; i < images.length; i += batchSize) {
+        chunks.push(images.slice(i, i + batchSize));
+      }
+
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let fallbackCount = 0;
+      const scoredResults: any[] = [];
+
+      // Process batches with bounded concurrency
+      const concurrency = AI_BATCH_CONFIG.concurrency;
+      for (let i = 0; i < chunks.length; i += concurrency) {
+        const batchSlice = chunks.slice(i, i + concurrency);
+
+        const batchPromises = batchSlice.map(async (batchImages, chunkIdx) => {
+          try {
+            // Stage 1: Flash-Lite Zero-Thinking Extraction
+            const extraction = await extractStudentAnswersWithFlashLite(batchImages, questionCount);
+            totalInputTokens += extraction.inputTokens;
+            totalOutputTokens += extraction.outputTokens;
+
+            const batchResults: any[] = [];
+
+            for (let j = 0; j < batchImages.length; j++) {
+              const item = extraction.results[j];
+              const img = batchImages[j];
+
+              // Quality Gate: Check if extraction was accurate and complete
+              const isValid = item &&
+                Array.isArray(item.answers) &&
+                item.answers.length === questionCount &&
+                (item.confidence || 0.9) >= 0.85 &&
+                !item.needsReview;
+
+              if (isValid) {
+                // Quality passed -> instant TypeScript scoring
+                batchResults.push(scoreStudentSheet(item, answerKeys, questionCount));
+              } else {
+                // Quality failed -> Strong Model Fallback for ONLY this sheet
+                fallbackCount++;
+                try {
+                  const fallbackData = await fallbackSingleStudentExtraction(img, questionCount);
+                  totalInputTokens += fallbackData.inputTokens;
+                  totalOutputTokens += fallbackData.outputTokens;
+                  batchResults.push(scoreStudentSheet(fallbackData.result, answerKeys, questionCount));
+                } catch {
+                  // Fallback fallback: preserve item with review flag
+                  batchResults.push(scoreStudentSheet(item || {
+                    student_name: "Noma'lum o'quvchi",
+                    variant: "A",
+                    answers: Array.from({ length: questionCount }, () => '-'),
+                    confidence: 0.5,
+                    needsReview: true
+                  }, answerKeys, questionCount));
+                }
+              }
+            }
+
+            return batchResults;
+          } catch (batchErr) {
+            console.warn("Primary batch extraction error, running strong fallback on batch:", batchErr);
+            // Fallback entire batch sequentially
+            const fallbackBatchResults: any[] = [];
+            for (const img of batchImages) {
+              fallbackCount++;
+              try {
+                const fallbackData = await fallbackSingleStudentExtraction(img, questionCount);
+                totalInputTokens += fallbackData.inputTokens;
+                totalOutputTokens += fallbackData.outputTokens;
+                fallbackBatchResults.push(scoreStudentSheet(fallbackData.result, answerKeys, questionCount));
+              } catch {
+                fallbackBatchResults.push(scoreStudentSheet({
+                  student_name: "Noma'lum o'quvchi",
+                  variant: "A",
+                  answers: Array.from({ length: questionCount }, () => '-'),
+                  confidence: 0.5,
+                  needsReview: true
+                }, answerKeys, questionCount));
+              }
+            }
+            return fallbackBatchResults;
+          }
+        });
+
+        const settled = await Promise.allSettled(batchPromises);
+        for (const res of settled) {
+          if (res.status === 'fulfilled') {
+            scoredResults.push(...res.value);
+          }
+        }
+      }
+
+      const durationMs = Date.now() - startTime;
+      const finalPayload = {
+        taskType: 'TEST',
+        results: scoredResults
+      };
+
+      // Telemetry & Atomic Credit Commit
+      const telemetry: AiTelemetryData = {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        totalTokens: totalInputTokens + totalOutputTokens,
+        durationMs,
+        fallbackUsed: fallbackCount > 0,
+        imageCount: images.length,
+        modelName: fallbackCount > 0 ? `${AI_MODELS.testPrimary} + ${AI_MODELS.testFallback}` : AI_MODELS.testPrimary
+      };
+
+      await guardResult.context.commitCredits(telemetry);
+      await cacheAiResult(guardResult.context.fingerprint, finalPayload, 120);
+
+      return NextResponse.json(finalPayload);
+    }
+
+    // =========================================================================
+    // BRANCH B: DICTATION / ESSAY / OPEN QUESTION PIPELINE (Strong Vision Model)
+    // =========================================================================
+    const isDictation = taskType === 'DIKTANT' || taskType === 'DICTATION';
+    const dictObj = dictation || {};
+    const openObj = openQuestion || {};
+
+    const rawOrigText = dictObj.originalText || clientOriginalText || "";
+    const rawQuestionText = openObj.questionText || clientQuestionText || "";
+    const targetMaxScore = openObj.maxScore || clientMaxScore || 20;
 
     let promptText = "";
-    let targetSchema: any = testSchema;
-    const messageContent: any[] = [];
-
-    if (taskType === 'DIKTANT' || taskType === 'DICTATION') {
-      targetSchema = dictationSchema;
+    if (isDictation) {
       promptText = `
-Sen o'zbek tili va adabiyoti fanining tajribali, adolatli va talabchan o'qituvchisisan.
-Senga o'quvchilar tomonidan daftarda qo'lda yozilgan DIKTANT rasmlari va ORIGINAL DIKTANT MATNI taqdim etilgan.
+Sen o'zbek tili va adabiyoti fanining tajribali, talabchan o'qituvchisisan.
+Senga o'quvchilar tomonidan daftarda yozilgan DIKTANT rasmlari va ORIGINAL MATN berilgan.
 
-${sourceImage ? `DIQQAT: Birinchi biriktirilgan rasm — bu O'QITUVCHI DAFTARI YOKI DARSLIKDAGI ASL DIKTANT MATNI.
-Qolgan barcha keyingi rasmlar esa O'QUVCHILARNING DAFTARLARI. Birinchi rasmdagi asl matnni aniq o'qib olib, qolgan har bir o'quvchi daftari bilan so'zma-so'z, harfma-harf solishtirib tekshir.` : `ORIGINAL MATN:
+ORIGINAL MATN:
 """
-${originalText || "Original matn berilmagan. O'quvchi yozgan matndagi imlo va tinish qoidalarini mustaqil tahlil qil."}
-"""`}
-
-TEKSHIRISH MEZONLARI:
-- Maksimal ball: ${maxScore} ball
-- Har bir imlo (orfoografik) xatosi uchun: -${spellingPenalty} ball
-- Har bir tinish belgisi (punktuatsiya) xatosi uchun: -${punctuationPenalty} ball
-- Tushib qolgan yoki ortiqcha so'zlar: imlo xatosi sifatida hisoblansin.
-- Husnixat (chiroyli/xunuk yozuv) uchun ball AYIRILMASIN. Faqat matn to'g'riligi baholanadi.
-
-VAZIFANG:
-1. Har bir o'quvchi daftaridan uning ism-sharifini aniqlash. Agar aniqlanmasa "No'malum o'quvchi" deb yoz.
-2. O'quvchi yozgan yozuvni o'qib, original matn bilan so'zma-so'z, harfma-harf solishtir.
-3. Barcha xatoliklarni ro'yxatga ol (type: 'IMLO' yoki 'TINISH' yoki 'TUSHIB_QOLGAN' yoki 'ORTIQCHA').
-4. Yakuniy ballni hisobla: ball = Math.max(0, ${maxScore} - (imloXatolar * ${spellingPenalty}) - (tinishXatolar * ${punctuationPenalty})).
-5. Agar o'quvchining yozuvi juda xira, yirtilgan yoki tushunarsiz bo'lsa confidence darajasini 0.5 dan past qilib, needsReview: true deb belgilang.
-6. O'quvchi uchun qisqa va aniq o'zbek tilida pedagogik izoh (feedback) yoz.
-      `;
-    } else if (taskType === 'OPEN_QUESTION' || taskType === 'ESSAY') {
-      targetSchema = openQuestionSchema;
-      promptText = `
-Sen maktab o'qituvchisisan. Senga o'quvchilar tomonidan qo'lda yozilgan OCHIQ SAVOL / YOZMA ISH rasmlari berilgan.
-
-${sourceImage ? `DIQQAT: Birinchi biriktirilgan rasm — bu DARSLIK YOKI O'QITUVCHI TOPSHIRIQ VARAQASI (Savol matni va topshiriq).
-Qolgan barcha keyingi rasmlar esa O'QUVCHILARNING YOZMA JAVOBLARI. Birinchi rasmdagi savol va topshiriq asosida o'quvchilarning javoblarini bahola.` : `SAVOL / TOPSHIRIQ:
-"""
-${questionText || "Savol matni"}
-"""`}
-
-BAHOLASH MEZONLARI:
-"""
-${rubricRules || `Asosiy faktlar va tushunchalar: 5 ball
-Mantiqiy tushuntirish va dalillar: 3 ball
-Xulosa va fikrni ifodalash: 2 ball
-Maksimal ball: ${maxScore}`}
+${rawOrigText || "Original matn berilmagan. O'quvchi yozgan matndagi imlo va tinish qoidalarini mustaqil tahlil qil."}
 """
 
 VAZIFANG:
-1. O'quvchining ism-sharifini aniqlash.
-2. Daftardagi qo'lyozma javobni to'liq o'qib chiqish va extractedAnswerText ga yozish.
-3. Javobni berilgan mezonlar (rubric) bo'yicha bosqichma-bosqich baholash (criteriaBreakdown).
-4. Har bir mezon bo'yicha nega shu ball berilganini asoslab berish.
-5. Umumiy ball va foizni hisoblab, o'quvchiga yo'naltiruvchi feedback yozish.
-6. Agar yozuv o'qib bo'lmaydigan bo'lsa confidence pasaytirilsin va needsReview: true qilinsin.
-      `;
+1. Har bir o'quvchining ism-sharifini aniqla.
+2. Original matn bilan so'zma-so'z, harfma-harf solishtir.
+3. Imlo (IMLO) va tinish belgisi (TINISH) xatolarini ro'yxatga ol.
+4. Maksimal ball: ${targetMaxScore}. Har bir imlo xatosiga -1 ball, tinish xatosiga -0.5 ball.
+5. Qisqa pedagogik feedback va confidence ber.
+
+JSON formatida chiqar:
+{
+  "taskType": "DIKTANT",
+  "results": [
+    {
+      "student_name": "Ism Familiya",
+      "score": 18,
+      "maxScore": ${targetMaxScore},
+      "percentage": 90,
+      "spellingErrorsCount": 1,
+      "punctuationErrorsCount": 2,
+      "errorsList": [
+        { "type": "IMLO", "original": "kitob", "written": "ketob", "explanation": "unli harf xatosi" }
+      ],
+      "feedback": "Yaxshi yozilgan",
+      "confidence": 0.95,
+      "needsReview": false
+    }
+  ]
+}
+      `.trim();
     } else {
-      // DEFAULT: TEST (ABCD)
-      targetSchema = testSchema;
+      // Open Question / Essay
       promptText = `
-Sen tajribali va juda aniq ishlaydigan maktab o'qituvchisisan.
-Senga o'quvchilar tomonidan ishlangan test javob varaqalari (rasmlar) va testning TO'G'RI JAVOB KALITI berilgan.
+Sen maktab o'qituvchisisan. Senga o'quvchilarning OCHIQ SAVOL / YOZMA ISH daftari rasmlari berilgan.
 
-TO'G'RI JAVOB KALITI:
-${answerKey}
+SAVOL:
+"""
+${rawQuestionText || "Savol matni"}
+"""
+
+Maksimal ball: ${targetMaxScore}
 
 VAZIFANG:
-1. Har bir rasmdan o'quvchining ism-sharifini aniqlash.
-2. O'quvchi qaysi variantni ishlaganini aniqlash (masalan, A, B).
-3. Har bir savol (${questionCount || 20} ta savol) bo'yicha o'quvchi belgilagan javobni aniqla.
-4. Javobni kalit bilan solishtirib isCorrect belgilash.
-5. Agar javob noaniq bo'lsa confidence pasaytirilib, needsReview: true berilsin.
-6. To'g'ri javoblar soni (score) va foizini hisobla.
-      `;
+1. O'quvchi ism-sharifini aniqla.
+2. Daftardagi javobni to'liq o'qib, extractedAnswerText ga yoz.
+3. Javobni mazmuni, mantiqi va to'liqligi bo'yicha baholab criteriaBreakdown tuz.
+4. Score, percentage, feedback va confidence chiqar.
+
+JSON formatida chiqar:
+{
+  "taskType": "OPEN_QUESTION",
+  "results": [
+    {
+      "student_name": "Ism Familiya",
+      "score": 16,
+      "maxScore": ${targetMaxScore},
+      "percentage": 80,
+      "extractedAnswerText": "Daftardagi matn",
+      "criteriaBreakdown": [
+        { "criterion": "Faktlar", "awardedPoints": 5, "maxPoints": 5, "feedback": "To'g'ri" }
+      ],
+      "feedback": "Fikrlar yaxshi ifodalangan",
+      "confidence": 0.92,
+      "needsReview": false
+    }
+  ]
+}
+      `.trim();
     }
 
-    messageContent.push({ type: 'text', text: promptText });
-    
-    // If sourceImage is provided, prepend it first
-    if (sourceImage) {
-      messageContent.push({
-        type: 'image',
-        image: sourceImage.data,
-      });
-    }
-
+    const contents: any[] = [{ text: promptText }];
     for (const img of images) {
-      messageContent.push({
-        type: 'image',
-        image: img.data, 
+      contents.push({
+        inlineData: {
+          data: img.data,
+          mimeType: img.mimeType || 'image/jpeg'
+        }
       });
     }
 
-    const result = await streamObject({
-      model: google('gemini-3.6-flash'), 
-      schema: targetSchema,
-      messages: [{ role: 'user', content: messageContent }],
+    const response = await genAI.models.generateContent({
+      model: AI_MODELS.dictation,
+      contents,
+      config: {
+        responseMimeType: "application/json"
+      }
     });
 
-    // Commit credit deduction atomically
-    await guardResult.context.commitCredits();
+    const parsedJson = JSON.parse(response.text || "{}");
+    const usage = response.usageMetadata || {};
 
-    return result.toTextStreamResponse();
+    const durationMs = Date.now() - startTime;
+    const telemetry: AiTelemetryData = {
+      inputTokens: usage.promptTokenCount || (images.length * 500),
+      outputTokens: usage.candidatesTokenCount || (images.length * 150),
+      durationMs,
+      fallbackUsed: false,
+      imageCount: images.length,
+      modelName: AI_MODELS.dictation
+    };
+
+    await guardResult.context.commitCredits(telemetry);
+    await cacheAiResult(guardResult.context.fingerprint, parsedJson, 120);
+
+    return NextResponse.json(parsedJson);
 
   } catch (error: any) {
     console.error("Grader API error:", error);
-    return new Response(JSON.stringify({ error: "Tekshirishda xatolik yuz berdi.", details: error.message }), { status: 500 });
+    return NextResponse.json({ error: "Tekshirishda xatolik yuz berdi.", details: error.message }, { status: 500 });
   }
 }
