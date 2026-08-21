@@ -508,19 +508,23 @@ export async function POST(request: Request) {
     const openObj = openQuestion || {};
 
     const rawOrigText = dictObj.originalText || clientOriginalText || "";
+    const referenceImage = dictObj.referenceImage || body.referenceImage || null;
     const rawQuestionText = openObj.questionText || clientQuestionText || "";
     const targetMaxScore = openObj.maxScore || clientMaxScore || 20;
 
     let promptText = "";
     if (isDictation) {
+      const origTextInstruction = rawOrigText
+        ? `ORIGINAL MATN:\n"""\n${rawOrigText}\n"""`
+        : referenceImage
+        ? `ORIGINAL MATN: Birinchi rasmda asl diktant / kitob matni namunasi ko'rsatilgan. O'quvchilarning keyingi daftar rasmlarini aynan shu birinchi rasm bilan harfma-harf solishtir.`
+        : `ORIGINAL MATN: Original matn berilmagan. O'quvchi yozgan matndagi imlo va tinish qoidalarini mustaqil tahlil qil.`;
+
       promptText = `
 Sen o'zbek tili va adabiyoti fanining tajribali, talabchan o'qituvchisisan.
 Senga o'quvchilar tomonidan daftarda yozilgan DIKTANT rasmlari va ORIGINAL MATN berilgan.
 
-ORIGINAL MATN:
-"""
-${rawOrigText || "Original matn berilmagan. O'quvchi yozgan matndagi imlo va tinish qoidalarini mustaqil tahlil qil."}
-"""
+${origTextInstruction}
 
 VAZIFANG:
 1. Har bir o'quvchining ism-sharifini aniqla.
@@ -591,6 +595,17 @@ JSON formatida chiqar:
     }
 
     const contents: any[] = [{ text: promptText }];
+    
+    if (isDictation && referenceImage && referenceImage.data) {
+      contents.push({
+        inlineData: {
+          data: referenceImage.data,
+          mimeType: referenceImage.mimeType || 'image/jpeg'
+        }
+      });
+      contents.push({ text: "YUQORIDAGI RASM: BU ASL DIKTANT / KITOB MATNI (ORIGINAL REFERENCE). QUYIDAGI RASMLAR ESA O'QUVCHILARNING DAFTARLARI." });
+    }
+
     for (const img of images) {
       contents.push({
         inlineData: {

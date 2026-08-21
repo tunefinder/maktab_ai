@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/Button";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { fastFetch } from "@/utils/fastFetch";
-import { compressImagesBatch } from "@/utils/imageCompressor";
+import { compressImagesBatch, compressImage } from "@/utils/imageCompressor";
 import EmaktabExportModal from "@/components/EmaktabExportModal";
 import LimitExceededModal from "@/components/LimitExceededModal";
 import Link from "next/link";
@@ -52,7 +52,11 @@ export default function Grader() {
   const [taskType, setTaskType] = useState<TaskType>('TEST');
   
   // Dictation parameters
+  const [dictationTab, setDictationTab] = useState<'text' | 'image'>('text');
   const [originalText, setOriginalText] = useState("");
+  const [referenceImage, setReferenceImage] = useState<{ data: string; mimeType: string } | null>(null);
+  const [isExtractingOcr, setIsExtractingOcr] = useState(false);
+  const [isDraggingDictationImage, setIsDraggingDictationImage] = useState(false);
   const [maxErrorsSpelling, setMaxErrorsSpelling] = useState(5);
   const [maxErrorsPunctuation, setMaxErrorsPunctuation] = useState(5);
 
@@ -64,6 +68,7 @@ export default function Grader() {
   // Images state
   const [selectedImages, setSelectedImages] = useState<Array<{ data: string; mimeType: string }>>([]);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Saved Results State
@@ -108,6 +113,90 @@ export default function Grader() {
     }
   };
 
+  // Drag and drop for student notebook photos
+  const handleDropImages = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (droppedFiles.length === 0) {
+      toast.error("Iltimos, faqat rasm fayllarini tashlang");
+      return;
+    }
+
+    setIsCompressing(true);
+    toast.loading(`${droppedFiles.length} ta rasm optimallashtirilmoqda...`, { id: "compressToast" });
+
+    try {
+      const compressedList = await compressImagesBatch(droppedFiles);
+      setSelectedImages(prev => [...prev, ...compressedList]);
+      toast.success(`${droppedFiles.length} ta rasm qo'shildi! 🎉`, { id: "compressToast" });
+    } catch {
+      toast.error("Rasmlarni yuklashda xatolik", { id: "compressToast" });
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  // Handle Dictation Reference Image Upload
+  const handleDictationImageUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error("Iltimos, faqat rasm faylini tanlang (JPG, PNG)");
+      return;
+    }
+
+    setIsCompressing(true);
+    const toastId = toast.loading("Asl diktant rasmi yuklanmoqda...");
+
+    try {
+      const compressed = await compressImage(file);
+      setReferenceImage({ data: compressed.data, mimeType: compressed.mimeType });
+      toast.success("Asl diktant rasmi yuklandi! 📸", { id: toastId });
+    } catch {
+      toast.error("Rasmni yuklashda xatolik", { id: toastId });
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  // Handle OCR extraction from Dictation Photo
+  const handleExtractOcr = async () => {
+    if (!referenceImage) {
+      toast.error("Iltimos, avval diktant rasmini yuklang");
+      return;
+    }
+
+    setIsExtractingOcr(true);
+    const toastId = toast.loading("AI rasmdagi matnni o'qimoqda...");
+
+    try {
+      const res = await fetch("/api/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: referenceImage })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 403 || data.limitExceeded) {
+          setIsLimitModalOpen(true);
+          setLimitErrorMessage(data.error || "AI limitingiz yetarli emas");
+          toast.dismiss(toastId);
+          return;
+        }
+        throw new Error(data.error || "Matnni ajratib olishda xatolik");
+      }
+
+      setOriginalText(data.text);
+      setDictationTab('text');
+      toast.success("Matn muvaffaqiyatli o'qib olindi! ✍️", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "OCR xatolik", { id: toastId });
+    } finally {
+      setIsExtractingOcr(false);
+    }
+  };
+
   const handleRemoveImage = (index: number) => {
     setSelectedImages(prev => prev.filter((_, idx) => idx !== index));
   };
@@ -128,8 +217,8 @@ export default function Grader() {
       return;
     }
 
-    if (taskType === 'DIKTANT' && !originalText.trim()) {
-      toast.error("Iltimos, asl diktant matnini kiriting");
+    if (taskType === 'DIKTANT' && !originalText.trim() && !referenceImage) {
+      toast.error("Iltimos, asl diktant matnini yozing yoki uning kitob/namuna rasmini yuklang");
       return;
     }
 
@@ -149,6 +238,7 @@ export default function Grader() {
     } else if (taskType === 'DIKTANT') {
       payload.dictation = {
         originalText,
+        referenceImage,
         maxErrorsSpelling,
         maxErrorsPunctuation
       };
@@ -388,17 +478,168 @@ export default function Grader() {
           )}
 
           {taskType === 'DIKTANT' && (
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                Asl diktant matnini kiriting *
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Diktantning to'g'ri matnini shu yerga yozing yoki nusxalab qo'ying..."
-                value={originalText}
-                onChange={(e) => setOriginalText(e.target.value)}
-                className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-              />
+            <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/60 rounded-3xl border border-slate-200 dark:border-slate-700 space-y-4">
+              
+              {/* Mode Switch Tabs */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-700 pb-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
+                    Asl diktant manbasi *
+                  </label>
+                  <span className="text-[11px] text-slate-500 block">
+                    Matnni qo'lda yozing yoki kitob/namuna rasmini yuklang
+                  </span>
+                </div>
+
+                <div className="flex bg-slate-200/70 dark:bg-slate-900/60 p-1 rounded-xl gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDictationTab('text')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      dictationTab === 'text'
+                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <Type className="w-3.5 h-3.5" />
+                    <span>Matn yozish</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDictationTab('image')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      dictationTab === 'image'
+                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Kitob / Matn rasmi</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab 1: Text Area */}
+              {dictationTab === 'text' ? (
+                <div className="space-y-2">
+                  <textarea
+                    rows={4}
+                    placeholder="Diktantning to'g'ri matnini shu yerga yozing yoki nusxalab qo'ying..."
+                    value={originalText}
+                    onChange={(e) => setOriginalText(e.target.value)}
+                    className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-sans"
+                  />
+                  {referenceImage && (
+                    <div className="flex items-center justify-between text-xs text-slate-500 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <CheckCircle className="w-4 h-4" />
+                        Asl kitob rasmi biriktirilgan
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setReferenceImage(null)}
+                        className="text-rose-600 hover:underline font-bold text-[11px]"
+                      >
+                        Rasmni olib tashlash
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Tab 2: Image Upload with Drag-and-Drop + Instant OCR */
+                <div className="space-y-3">
+                  {!referenceImage ? (
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingDictationImage(true); }}
+                      onDragLeave={() => setIsDraggingDictationImage(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDraggingDictationImage(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleDictationImageUpload(file);
+                      }}
+                      className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all flex flex-col items-center justify-center gap-2 cursor-pointer ${
+                        isDraggingDictationImage
+                          ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/20'
+                          : 'border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-white dark:bg-slate-900'
+                      }`}
+                    >
+                      <label className="w-full flex flex-col items-center justify-center cursor-pointer gap-2">
+                        <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center shadow-inner">
+                          <Upload className="w-6 h-6" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {isDraggingDictationImage ? "Rasmni shu yerga tashlang!" : "Kitob yoki qog'ozdagi diktant rasmini tanlang yoki sudrab tashlang"}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          (Kamera yoki Galereyadan 1 ta rasm)
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleDictationImageUpload(file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5 w-full sm:w-auto">
+                        <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0 relative">
+                          <img
+                            src={`data:${referenceImage.mimeType};base64,${referenceImage.data}`}
+                            alt="Asl diktant matni"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            Asl diktant rasmi biriktirildi
+                          </h4>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            AI daftarlarni ushbu rasm bilan to'g'ridan-to'g'ri solishtiradi.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <button
+                          type="button"
+                          onClick={handleExtractOcr}
+                          disabled={isExtractingOcr}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isExtractingOcr ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>O'qilmoqda...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                              <span>Matnni ajratib olish (OCR)</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setReferenceImage(null)}
+                          className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 rounded-xl transition-colors"
+                          title="Rasmni o'chirish"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
 
@@ -418,7 +659,7 @@ export default function Grader() {
           )}
         </div>
 
-        {/* Step 3: Upload Student Notebooks */}
+        {/* Step 3: Upload Student Notebooks with HTML5 Drag-and-Drop */}
         <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -432,27 +673,38 @@ export default function Grader() {
             </span>
           </div>
 
-          {/* Upload Dropzone */}
-          <label className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-600 dark:hover:border-indigo-500 rounded-3xl p-8 text-center cursor-pointer transition-all bg-slate-50/70 dark:bg-slate-800/40 hover:bg-slate-50 flex flex-col items-center justify-center gap-3 group">
-            <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
-              <Camera className="w-7 h-7" />
-            </div>
-            <div className="space-y-1">
-              <span className="text-sm font-bold text-slate-900 dark:text-slate-100 block">
-                Daftar yoki test varaqasi rasmlarini tanlang
-              </span>
-              <span className="text-xs text-slate-500 block">
-                Bir vaqtning o'zida bir nechta rasm yuklashingiz mumkin (Kameradan yoki Galereyadan)
-              </span>
-            </div>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </label>
+          {/* Upload Dropzone with Drag and Drop */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+            onDragLeave={() => setIsDraggingOver(false)}
+            onDrop={handleDropImages}
+            className={`border-2 border-dashed rounded-3xl p-8 text-center transition-all flex flex-col items-center justify-center gap-3 cursor-pointer ${
+              isDraggingOver
+                ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-4 ring-indigo-500/20 scale-[1.01]'
+                : 'border-slate-300 dark:border-slate-700 hover:border-indigo-600 dark:hover:border-indigo-500 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-slate-50'
+            }`}
+          >
+            <label className="w-full flex flex-col items-center justify-center cursor-pointer gap-3">
+              <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
+                <Camera className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-100 block">
+                  {isDraggingOver ? "Rasmlarni shu yerga tashlang! 📥" : "Daftar yoki test varaqasi rasmlarini tanlang yoki sudrab tashlang"}
+                </span>
+                <span className="text-xs text-slate-500 block">
+                  Bir vaqtning o'zida bir nechta rasm yuklashingiz mumkin (Kameradan, Galereyadan yoki Kompyuterdan)
+                </span>
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
 
           {/* Image Previews */}
           {selectedImages.length > 0 && (
