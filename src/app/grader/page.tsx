@@ -266,7 +266,7 @@ export default function Grader() {
                       : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="text-xs sm:text-sm font-bold">{cls.name}</div>
+                  <div className="text-xs sm:text-sm font-bold truncate" title={cls.name}>{cls.name}</div>
                   <div className="text-[10px] text-slate-400 mt-0.5">{cls._count?.students || 0} nafar o'quvchi</div>
                 </button>
               ))}
@@ -283,44 +283,44 @@ export default function Grader() {
             <span>Topshiriq turini va kalitini tanlang</span>
           </h3>
 
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
             <button
               type="button"
               onClick={() => setTaskType('TEST')}
-              className={`p-3.5 rounded-2xl border text-center transition-all ${
+              className={`p-2.5 sm:p-3.5 rounded-2xl border text-center transition-all ${
                 taskType === 'TEST'
                   ? 'bg-indigo-600 text-white font-bold shadow-md'
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
               }`}
             >
-              <div className="text-xs sm:text-sm font-bold">🟢 Test (ABCD)</div>
-              <div className="text-[10px] opacity-80 mt-0.5">Javob varaqasi</div>
+              <div className="text-xs sm:text-sm font-bold truncate">🟢 Test</div>
+              <div className="text-[10px] opacity-80 mt-0.5 truncate">Javob varaqasi</div>
             </button>
 
             <button
               type="button"
               onClick={() => setTaskType('DIKTANT')}
-              className={`p-3.5 rounded-2xl border text-center transition-all ${
+              className={`p-2.5 sm:p-3.5 rounded-2xl border text-center transition-all ${
                 taskType === 'DIKTANT'
                   ? 'bg-indigo-600 text-white font-bold shadow-md'
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
               }`}
             >
-              <div className="text-xs sm:text-sm font-bold">🔵 Diktant / Matn</div>
-              <div className="text-[10px] opacity-80 mt-0.5">Imlo xatolari</div>
+              <div className="text-xs sm:text-sm font-bold truncate">🔵 Diktant</div>
+              <div className="text-[10px] opacity-80 mt-0.5 truncate">Imlo xatolari</div>
             </button>
 
             <button
               type="button"
               onClick={() => setTaskType('OPEN_QUESTION')}
-              className={`p-3.5 rounded-2xl border text-center transition-all ${
+              className={`p-2.5 sm:p-3.5 rounded-2xl border text-center transition-all ${
                 taskType === 'OPEN_QUESTION'
                   ? 'bg-indigo-600 text-white font-bold shadow-md'
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
               }`}
             >
-              <div className="text-xs sm:text-sm font-bold">🟣 Ochiq savol</div>
-              <div className="text-[10px] opacity-80 mt-0.5">Matnli tahlil</div>
+              <div className="text-xs sm:text-sm font-bold truncate">🟣 Ochiq savol</div>
+              <div className="text-[10px] opacity-80 mt-0.5 truncate">Matnli tahlil</div>
             </button>
           </div>
 
@@ -341,17 +341,39 @@ export default function Grader() {
                   Sizda testlar kaliti mavjud emas. Iltimos, <Link href="/tests" className="underline font-bold">Testlar bo'limida</Link> test kalitini kiriting.
                 </div>
               ) : (
-                <select
-                  value={selectedTestId}
-                  onChange={(e) => setSelectedTestId(e.target.value)}
-                  className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                >
-                  {tests.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.title} ({t.subject}) • {t.questionCount} ta savol • Kalit: {t.answerKey || 'Mavjud'}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <select
+                    value={selectedTestId}
+                    onChange={(e) => setSelectedTestId(e.target.value)}
+                    className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500 truncate"
+                  >
+                    {tests.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} ({t.subject}) — {t.questionCount} ta savol
+                      </option>
+                    ))}
+                  </select>
+
+                  {tests.find(t => t.id === selectedTestId) && (
+                    <div className="flex flex-wrap items-center gap-1.5 p-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-xl text-xs">
+                      <span className="font-bold text-indigo-950 dark:text-indigo-200">
+                        {tests.find(t => t.id === selectedTestId)?.title}
+                      </span>
+                      <span className="text-indigo-400">•</span>
+                      <span className="text-slate-600 dark:text-slate-300">
+                        {tests.find(t => t.id === selectedTestId)?.questionCount} ta savol
+                      </span>
+                      {tests.find(t => t.id === selectedTestId)?.answerKey && (
+                        <>
+                          <span className="text-indigo-400">•</span>
+                          <span className="font-mono text-indigo-700 dark:text-indigo-300 truncate max-w-[200px]" title={tests.find(t => t.id === selectedTestId)?.answerKey}>
+                            Kalit: {tests.find(t => t.id === selectedTestId)?.answerKey}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
