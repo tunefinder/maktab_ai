@@ -13,16 +13,20 @@ import {
   CheckCircle2, 
   BookmarkPlus, 
   X, 
-  Check,
-  Calendar,
-  Layers,
-  ArrowRight,
-  Printer
+  Check, 
+  Calendar, 
+  Layers, 
+  ArrowRight, 
+  Printer,
+  Users,
+  FileBarChart,
+  HelpCircle,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import toast from "react-hot-toast";
-import jsPDF from "jspdf";
 import Link from "next/link";
 import TestPrintModal from "@/components/TestPrintModal";
 
@@ -30,7 +34,7 @@ interface TestQuestion {
   question: string;
   options: string[];
   correct_answer: string;
-  explanation: string;
+  explanation?: string;
 }
 
 interface ClassItem {
@@ -57,15 +61,16 @@ function TestsPageContent() {
   const [manualQuestionCount, setManualQuestionCount] = useState("20");
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualAnswerKey, setManualAnswerKey] = useState("");
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
 
   // AI Generator Form State
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<{questions: TestQuestion[]} | null>(null);
   const [aiFormData, setAiFormData] = useState({
-    grade: "",
-    subject: initialSubject,
-    topic: initialTopic,
-    questionsCount: "5",
+    grade: "8-sinf",
+    subject: initialSubject || "O'zbekiston tarixi",
+    topic: initialTopic || "",
+    questionsCount: "10",
     difficulty: "O'rta"
   });
 
@@ -98,8 +103,8 @@ function TestsPageContent() {
   const fetchClasses = async () => {
     try {
       const res = await fetch("/api/classes");
-      const data = await res.json();
-      if (Array.isArray(data)) {
+      if (res.ok) {
+        const data = await res.json();
         setClasses(data);
         if (data.length > 0) {
           setManualClassId(data[0].id);
@@ -107,20 +112,21 @@ function TestsPageContent() {
         }
       }
     } catch {
-      toast.error("Sinflarni yuklashda xatolik");
+      console.error("Classes error");
     }
   };
 
   const fetchTests = async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/tests");
-      const data = await res.json();
-      if (Array.isArray(data)) {
+      if (res.ok) {
+        const data = await res.json();
         setTests(data);
       }
-      setLoading(false);
     } catch {
       toast.error("Testlarni yuklashda xatolik");
+    } finally {
       setLoading(false);
     }
   };
@@ -130,159 +136,150 @@ function TestsPageContent() {
     fetchTests();
   }, []);
 
-  // Handle Manual Test Submit
-  const handleManualSubmit = async (e: React.FormEvent) => {
+  // Handle Manual Test Creation
+  const handleCreateManualTest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualClassId || !manualSubject || !manualTitle || !manualAnswerKey) {
-      return toast.error("Barcha maydonlarni to'ldiring");
+    if (!manualTitle.trim()) {
+      toast.error("Test nomini kiriting");
+      return;
     }
-    
+    if (!manualClassId) {
+      toast.error("Iltimos, sinfni tanlang");
+      return;
+    }
+
+    setIsSubmittingManual(true);
     try {
-      const res = await fetch("/api/tests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          classId: manualClassId,
-          subject: manualSubject,
-          title: manualTitle,
-          questionCount: manualQuestionCount,
-          date: manualDate,
-          answerKey: manualAnswerKey
-        })
-      });
+      const questionsCountNum = parseInt(manualQuestionCount) || 20;
+      const cleanKey = manualAnswerKey.trim().toUpperCase().replace(/\s+/g, '');
       
-      if (res.ok) {
-        toast.success("Test muvaffaqiyatli yaratildi");
-        setManualSubject("");
-        setManualTitle("");
-        setManualAnswerKey("");
-        setActiveTab("list");
-        fetchTests();
-      } else {
-        toast.error("Xatolik yuz berdi");
+      const payload = {
+        title: manualTitle,
+        subject: manualSubject || "Umumiy",
+        classId: manualClassId,
+        questionCount: questionsCountNum,
+        date: manualDate,
+        answerKey: cleanKey
+      };
+
+      const res = await fetch('/api/tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Testni saqlashda xatolik");
       }
-    } catch {
-      toast.error("Xatolik yuz berdi");
+
+      toast.success("Test muvaffaqiyatli yaratildi!");
+      setManualTitle("");
+      setManualAnswerKey("");
+      await fetchTests();
+      setActiveTab("list");
+    } catch (err: any) {
+      toast.error(err.message || "Xatolik yuz berdi");
+    } finally {
+      setIsSubmittingManual(false);
     }
   };
 
-  // Handle AI Test Generate
-  const handleAiSubmit = async (e: React.FormEvent) => {
+  // Handle AI Test Generation
+  const handleGenerateAiTest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!aiFormData.topic.trim()) {
+      toast.error("Iltimos, dars mavzusini kiriting");
+      return;
+    }
+
     setAiLoading(true);
     setAiResult(null);
 
     try {
-      const response = await fetch("/api/test-generator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(aiFormData),
+      const res = await fetch('/api/test-generator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grade: aiFormData.grade,
+          subject: aiFormData.subject,
+          topic: aiFormData.topic,
+          questionsCount: parseInt(aiFormData.questionsCount) || 10,
+          difficulty: aiFormData.difficulty
+        })
       });
 
-      if (!response.ok) throw new Error("Xatolik yuz berdi");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "AI test yaratishda xatolik yuz berdi");
+      }
 
-      const data = await response.json();
       setAiResult(data);
-      setAiCustomTitle(`${aiFormData.subject} - ${aiFormData.topic}`);
-      toast.success("AI Test savollari tayyor!");
-    } catch {
-      toast.error("Xatolik yuz berdi. Qayta urinib ko'ring.");
+      setAiCustomTitle(`${aiFormData.subject}: ${aiFormData.topic}`);
+      toast.success("AI Test savollari tayyorlandi!");
+    } catch (err: any) {
+      toast.error(err.message || "Xatolik yuz berdi");
     } finally {
       setAiLoading(false);
     }
   };
 
-  // Handle AI Test Save to DB
-  const handleAiSaveToDatabase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aiResult || aiResult.questions.length === 0) return;
+  // Save AI Test to Database
+  const handleSaveAiTest = async () => {
+    if (!aiResult || !aiResult.questions) return;
     if (!aiSelectedClassId) {
-      toast.error("Iltimos, avval sinfni tanlang");
+      toast.error("Iltimos, sinfni tanlang");
       return;
     }
 
     setIsAiSaving(true);
-
     try {
-      const answerKeyParts = aiResult.questions.map((q, i) => {
-        const correctIdx = q.options.findIndex(opt => opt === q.correct_answer);
-        const letter = correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : "A";
-        return `${i + 1}-${letter}`;
-      });
-      const answerKey = answerKeyParts.join(", ");
+      const answerKeyString = aiResult.questions
+        .map((q, i) => `${i + 1}${q.correct_answer}`)
+        .join(" ");
 
-      const res = await fetch("/api/tests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          classId: aiSelectedClassId,
-          subject: aiFormData.subject,
-          title: aiCustomTitle || `${aiFormData.subject} - ${aiFormData.topic}`,
-          questionCount: aiResult.questions.length.toString(),
-          date: new Date().toISOString().split("T")[0],
-          answerKey
-        })
+      const payload = {
+        title: aiCustomTitle || `${aiFormData.subject} (${aiFormData.topic})`,
+        subject: aiFormData.subject,
+        classId: aiSelectedClassId,
+        questionCount: aiResult.questions.length,
+        date: new Date().toISOString().split('T')[0],
+        answerKey: answerKeyString
+      };
+
+      const res = await fetch('/api/tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        toast.success("Test muvaffaqiyatli saqlandi!");
-        setIsAiSaveModalOpen(false);
-        setActiveTab("list");
-        fetchTests();
-      } else {
-        toast.error("Saqlashda xatolik yuz berdi");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Testni saqlashda xatolik");
       }
-    } catch {
-      toast.error("Saqlashda xatolik yuz berdi");
+
+      toast.success("Test bazaga muvaffaqiyatli saqlandi!");
+      setIsAiSaveModalOpen(false);
+      await fetchTests();
+      setActiveTab("list");
+    } catch (err: any) {
+      toast.error(err.message || "Xatolik yuz berdi");
     } finally {
       setIsAiSaving(false);
     }
   };
 
-  const downloadPDF = () => {
-    if (!aiResult) return;
-    
-    const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.text("TEST SAVOLLARI", 105, 20, { align: "center" });
-    
-    doc.setFontSize(12);
-    doc.text(`Fan: ${aiFormData.subject} | Sinf: ${aiFormData.grade}`, 20, 30);
-    doc.text(`Mavzu: ${aiFormData.topic}`, 20, 40);
-    
-    let yPos = 55;
-    
-    aiResult.questions.forEach((q, i) => {
-      if (yPos > 270) {
-        doc.addPage();
-        yPos = 20;
-      }
-      
-      doc.setFontSize(12);
-      const splitQuestion = doc.splitTextToSize(`${i + 1}. ${q.question}`, 170);
-      doc.text(splitQuestion, 20, yPos);
-      yPos += (splitQuestion.length * 7) + 2;
-      
-      doc.setFontSize(11);
-      q.options.forEach((opt, idx) => {
-        const letter = String.fromCharCode(65 + idx);
-        doc.text(`${letter}) ${opt}`, 25, yPos);
-        yPos += 7;
-      });
-      
-      yPos += 5;
-    });
-    
-    doc.save(`testlar-${aiFormData.topic}.pdf`);
-  };
+  // Delete Test
+  const handleDeleteTest = async (testId: string) => {
+    if (!confirm("Haqiqatan ham ushbu testni o'chirmoqchimisiz?")) return;
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Test va uning barcha natijalari o'chiriladi. Rozimisiz?")) return;
     try {
-      const res = await fetch(`/api/tests/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/tests?id=${testId}`, { method: 'DELETE' });
       if (res.ok) {
         toast.success("Test o'chirildi");
-        fetchTests();
+        setTests(prev => prev.filter(t => t.id !== testId));
+      } else {
+        toast.error("O'chirishda xatolik");
       }
     } catch {
       toast.error("Xatolik yuz berdi");
@@ -290,457 +287,460 @@ function TestsPageContent() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-6xl mx-auto">
-      {/* Header with Title & Action Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shadow-sm shrink-0">
-            <FileSignature className="w-6 h-6" />
+    <div className="max-w-5xl mx-auto space-y-8 pb-24 animate-in fade-in duration-300">
+      
+      {/* Header */}
+      <SectionHeader
+        title="Testlar Boshqaruvi"
+        subtitle="AI yordamida avtomatik test tuzish, DTM javob varaqalarini chop etish va kalitlarni saqlash."
+        action={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'list'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Mening testlarim ({tests.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'ai'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI Test Tuzish</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('manual')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'manual'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              ✍️ Qo'lda Kalit Kiritish
+            </button>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Testlar Markazi</h1>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Testlar bazasi va AI yordamida tezkor tuzish</p>
-          </div>
-        </div>
+        }
+      />
 
-        {/* Tab Buttons */}
-        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 w-full sm:w-auto">
-          <button
-            onClick={() => setActiveTab("list")}
-            className={`flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "list"
-                ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm"
-                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            Mening Testlarim ({tests.length})
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("ai")}
-            className={`flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "ai"
-                ? "bg-primary text-white shadow-md shadow-primary/25"
-                : "text-primary hover:bg-primary/10"
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            AI Test Yaratish
-          </button>
-
-          <button
-            onClick={() => setActiveTab("manual")}
-            className={`flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "manual"
-                ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm"
-                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            Qo&apos;lda kalit kiritish
-          </button>
-        </div>
-      </div>
-
-      {/* TAB 1: LIST OF TESTS */}
-      {activeTab === "list" && (
-        <div className="space-y-4 animate-in fade-in duration-300">
+      {/* Tab 1: Mening Testlarim */}
+      {activeTab === 'list' && (
+        <div className="space-y-4">
           {loading ? (
-            <div className="text-center p-12 text-slate-400">Yuklanmoqda...</div>
-          ) : tests.length === 0 ? (
-            <div className="text-center p-16 bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl border border-dashed rounded-3xl space-y-4">
-              <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
-              <div>
-                <h3 className="font-bold text-slate-700 dark:text-slate-200 text-lg">Hali hech qanday test yaratilmagan</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">AI yordamida bir necha soniyada test yaratishingiz yoki qo&apos;lda kalit kiritishingiz mumkin.</p>
-              </div>
-              <div className="flex justify-center gap-3 pt-2">
-                <Button onClick={() => setActiveTab("ai")} className="bg-primary hover:opacity-95" leftIcon={<Sparkles className="w-4 h-4" />}>
-                  AI Bilan Test Yaratish
-                </Button>
-                <Button onClick={() => setActiveTab("manual")} variant="outline" leftIcon={<Plus className="w-4 h-4" />}>
-                  Qo&apos;lda Kiritish
-                </Button>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map(n => (
+                <div key={n} className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 animate-pulse space-y-3">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
+                  <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded w-2/3" />
+                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+                </div>
+              ))}
             </div>
+          ) : tests.length === 0 ? (
+            <EmptyState
+              icon={FileSignature}
+              title="Sizda hali yaratilgan testlar mavjud emas"
+              description="Daftar yoki testlarni tekshirishdan oldin AI yordamida test tuzing yoki tayyor test kalitini kiriting."
+              actionText="🤖 AI orqali test yaratish"
+              onAction={() => setActiveTab('ai')}
+              secondaryText="✍️ Qo'lda kalit kiritish"
+              onSecondaryAction={() => setActiveTab('manual')}
+            />
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {tests.map(test => (
-                <Card key={test.id} className="flex flex-col h-full border hover:border-primary/40 hover:shadow-md transition-all group bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl">
-                  <div className="p-5 flex-1">
-                    <div className="flex justify-between items-start mb-3">
-                      <span className="text-xs font-bold px-2.5 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 rounded-full">
-                        {test.class?.name || 'Sinf'}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {tests.map((test) => (
+                <div
+                  key={test.id}
+                  className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold">
+                        {test.class?.name || "Barcha sinflar"} • {test.subject}
                       </span>
-                      <button 
-                        onClick={() => handleDelete(test.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {test.date ? new Date(test.date).toLocaleDateString('uz-UZ') : ''}
+                      </span>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      {test.title}
+                    </h3>
+
+                    <div className="flex items-center gap-4 text-xs text-slate-500 font-medium">
+                      <span>Savollar soni: <b>{test.questionCount} ta</b></span>
+                      <span>Tekshirildi: <b>{test._count?.attempts || 0} nafar</b></span>
+                    </div>
+
+                    {test.answerKey && (
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-[11px] font-mono text-slate-600 dark:text-slate-300 truncate">
+                        Kalit: <b>{test.answerKey}</b>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        href={`/report?testId=${test.id}`}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <FileBarChart className="w-3.5 h-3.5" />
+                        <span>Natijalar</span>
+                      </Link>
+
+                      <button
+                        onClick={() => {
+                          setPrintData({
+                            title: test.title,
+                            subject: test.subject,
+                            grade: test.class?.name,
+                            questions: Array.from({ length: test.questionCount }).map((_, idx) => ({
+                              question: `${idx + 1}-savol`,
+                              options: ['A', 'B', 'C', 'D'],
+                              correct_answer: test.answerKey?.[idx] || 'A'
+                            }))
+                          });
+                          setIsPrintModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>DTM Varaqasi</span>
                       </button>
                     </div>
-                    
-                    <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 mb-1">{test.title}</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">{test.subject}</p>
-                    
-                    <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-slate-400">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {new Date(test.date).toLocaleDateString()}
-                      </div>
-                      <div>📝 {test.questionCount} ta savol</div>
-                      <div className="text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
-                        ✅ {test._count?.attempts || 0} ta topshirilgan
-                      </div>
-                    </div>
+
+                    <button
+                      onClick={() => handleDeleteTest(test.id)}
+                      className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all"
+                      title="O'chirish"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  
-                  <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 rounded-b-xl flex justify-between items-center">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate max-w-[180px]">
-                      Kalit: {test.answerKey}
-                    </span>
-                    <Link href={`/report?testId=${test.id}`}>
-                      <span className="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
-                        Tahlil <ArrowRight className="w-3 h-3" />
-                      </span>
-                    </Link>
-                  </div>
-                </Card>
+                </div>
               ))}
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 2: AI TEST GENERATOR */}
-      {activeTab === "ai" && (
-        <div className="animate-in fade-in duration-300">
-          <div className="grid lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
-              <form onSubmit={handleAiSubmit} className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-700 text-primary font-bold">
-                  <Sparkles className="w-4 h-4" />
-                  <span>AI Test Parametrlari</span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Fan</label>
-                  <input 
-                    type="text" required
-                    placeholder="Masalan: Biologiya"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                    value={aiFormData.subject}
-                    onChange={(e) => setAiFormData({...aiFormData, subject: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Sinf</label>
-                  <input 
-                    type="text" required
-                    placeholder="Masalan: 8"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                    value={aiFormData.grade}
-                    onChange={(e) => setAiFormData({...aiFormData, grade: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mavzu</label>
-                  <input 
-                    type="text" required
-                    placeholder="Masalan: Fotosintez jarayoni"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                    value={aiFormData.topic}
-                    onChange={(e) => setAiFormData({...aiFormData, topic: e.target.value})}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Savollar soni</label>
-                    <input 
-                      type="number" required max="20" min="1"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                      value={aiFormData.questionsCount}
-                      onChange={(e) => setAiFormData({...aiFormData, questionsCount: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Qiyinlik darajasi</label>
-                    <select 
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                      value={aiFormData.difficulty}
-                      onChange={(e) => setAiFormData({...aiFormData, difficulty: e.target.value})}
-                    >
-                      <option value="Oson">Oson</option>
-                      <option value="O'rta">O&apos;rta</option>
-                      <option value="Qiyin">Qiyin</option>
-                    </select>
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  disabled={aiLoading}
-                  className="w-full mt-2"
-                  leftIcon={aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                >
-                  {aiLoading ? "Test yaratilmoqda..." : "Testni Yaratish"}
-                </Button>
-              </form>
+      {/* Tab 2: AI orqali Test Tuzish */}
+      {activeTab === 'ai' && (
+        <div className="space-y-8">
+          
+          <form onSubmit={handleGenerateAiTest} className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-500" />
+                <span>AI orqali test savollarini avtomatik tuzish</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Dars mavzusi bo'yicha to'g'ri va xato variantlari bilan tayyor testlar shakllanadi</p>
             </div>
 
-            <div className="lg:col-span-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col min-h-[450px]">
-              {aiResult ? (
-                <div className="flex flex-col h-full animate-in slide-in-from-bottom-4 duration-500">
-                  <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 flex flex-wrap justify-between items-center gap-3 bg-white/90 dark:bg-slate-800/90 rounded-t-2xl shadow-sm">
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                      Natija: {aiResult.questions.length} ta savol
-                    </h2>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={() => {
-                          setPrintData({
-                            title: aiFormData.topic || "Mavzulashtirilgan test",
-                            subject: aiFormData.subject || "Fan",
-                            grade: aiFormData.grade || "",
-                            questions: aiResult.questions
-                          });
-                          setIsPrintModalOpen(true);
-                        }}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs shadow-sm"
-                        leftIcon={<Printer className="w-4 h-4" />}
-                      >
-                        A4 Chop etish & DTM
-                      </Button>
-                      <Button 
-                        onClick={() => setIsAiSaveModalOpen(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 h-9 text-xs"
-                        leftIcon={<BookmarkPlus className="w-4 h-4" />}
-                      >
-                        Bazaga saqlash
-                      </Button>
-                      <button onClick={downloadPDF} className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-xs font-semibold rounded-xl hover:bg-indigo-100 transition-colors">
-                        <Download className="w-3.5 h-3.5" />
-                        <span>PDF yuklash</span>
-                      </button>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Sinf *</label>
+                <select
+                  value={aiFormData.grade}
+                  onChange={(e) => setAiFormData({ ...aiFormData, grade: e.target.value })}
+                  className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                >
+                  {["5-sinf", "6-sinf", "7-sinf", "8-sinf", "9-sinf", "10-sinf", "11-sinf"].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Fan *</label>
+                <input
+                  type="text"
+                  value={aiFormData.subject}
+                  onChange={(e) => setAiFormData({ ...aiFormData, subject: e.target.value })}
+                  placeholder="Masalan: Fizika, Biologiya"
+                  className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Savollar soni</label>
+                <select
+                  value={aiFormData.questionsCount}
+                  onChange={(e) => setAiFormData({ ...aiFormData, questionsCount: e.target.value })}
+                  className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="5">5 ta savol</option>
+                  <option value="10">10 ta savol</option>
+                  <option value="15">15 ta savol</option>
+                  <option value="20">20 ta savol</option>
+                  <option value="30">30 ta savol</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Qiyinlik darajasi</label>
+                <select
+                  value={aiFormData.difficulty}
+                  onChange={(e) => setAiFormData({ ...aiFormData, difficulty: e.target.value })}
+                  className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="Oson">Oson (Boshlang'ich)</option>
+                  <option value="O'rta">O'rta (Standart maktab)</option>
+                  <option value="Qiyin">Qiyin (Olimpiada / DTM)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Dars mavzusini yozing *</label>
+              <input
+                type="text"
+                placeholder="Masalan: Amir Temurning harbiy yurishlari va davlat boshqaruvi"
+                value={aiFormData.topic}
+                onChange={(e) => setAiFormData({ ...aiFormData, topic: e.target.value })}
+                className="w-full p-4 text-xs sm:text-base font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+            </div>
+
+            <Button
+              type="submit"
+              disabled={aiLoading}
+              className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-xl transition-all active:scale-98 flex items-center justify-center gap-2"
+            >
+              {aiLoading ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>AI Test savollarini tuzmoqda...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                  <span>Test Savollarini Yaratish (2 AI kredit)</span>
+                </>
+              )}
+            </Button>
+          </form>
+
+          {/* AI Result Preview */}
+          {aiResult && aiResult.questions && (
+            <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    AI tomonidan {aiResult.questions.length} ta savol tayyorlandi!
+                  </h3>
+                  <p className="text-xs text-slate-500">Testni bazaga saqlashingiz yoki A4 DTM varaqasi qilib chop etishingiz mumkin</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setPrintData({
+                        title: `${aiFormData.subject}: ${aiFormData.topic}`,
+                        subject: aiFormData.subject,
+                        grade: aiFormData.grade,
+                        questions: aiResult.questions
+                      });
+                      setIsPrintModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>DTM Chop etish</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsAiSaveModalOpen(true)}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Bazaga Saqlash</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Questions List */}
+              <div className="space-y-3">
+                {aiResult.questions.map((q, i) => (
+                  <div key={i} className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+                    <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
+                      {i + 1}. {q.question}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300 pl-2">
+                      {q.options.map((opt, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-2 rounded-xl border ${
+                            opt.startsWith(q.correct_answer) || opt === q.correct_answer
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-bold dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-700/50'
+                          }`}
+                        >
+                          {opt}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  
-                  <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-6 max-h-[600px] custom-scrollbar">
-                    {aiResult.questions.map((q, i) => (
-                      <div key={i} className="bg-slate-50/70 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm relative">
-                        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3 flex gap-2">
-                          <span className="text-primary font-black">{i + 1}.</span> 
-                          {q.question}
-                        </h3>
-                        
-                        <div className="space-y-2">
-                          {q.options.map((opt, idx) => {
-                            const isCorrect = opt === q.correct_answer;
-                            return (
-                              <div 
-                                key={idx} 
-                                className={`flex items-center gap-3 p-2.5 rounded-xl border text-xs sm:text-sm ${
-                                  isCorrect 
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-300 font-semibold' 
-                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}
-                              >
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                                  isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                                }`}>
-                                  {String.fromCharCode(65 + idx)}
-                                </div>
-                                <span>{opt}</span>
-                                {isCorrect && <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-auto shrink-0" />}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        
-                        <div className="mt-3 text-xs text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30 p-2 rounded-lg">
-                          <span className="font-bold">Izoh:</span> {q.explanation}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center min-h-[400px]">
-                  <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
-                    <Sparkles className="w-8 h-8 text-primary" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Chapdagi maydonlarni to&apos;ldiring va &quot;Testni Yaratish&quot; tugmasini bosing.</p>
-                  <p className="text-xs text-slate-400 mt-1">Sun&apos;iy intellekt darslik standarti bo&apos;yicha savollar va javob kalitini tayyorlaydi.</p>
-                </div>
-              )}
+                ))}
+              </div>
+
             </div>
-          </div>
+          )}
+
         </div>
       )}
 
-      {/* TAB 3: MANUAL TEST FORM */}
-      {activeTab === "manual" && (
-        <Card className="p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-slate-200 dark:border-slate-700 animate-in fade-in duration-300 max-w-2xl mx-auto">
-          <form onSubmit={handleManualSubmit} className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold">
-              <Plus className="w-4 h-4" />
-              <span>Qo&apos;lda Test va Kalit Kiritish</span>
+      {/* Tab 3: Qo'lda Kalit Kiritish */}
+      {activeTab === 'manual' && (
+        <form onSubmit={handleCreateManualTest} className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6 max-w-2xl mx-auto">
+          <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span>✍️ Qog'ozdagi test kalitlarini tezkor kiritish</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">O'zingizda mavjud test kalitini kiritasiz va o'quvchilar javobini AI orqali tekshirasiz</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">1. Test nomi *</label>
+              <input
+                type="text"
+                placeholder="Masalan: 1-Chorak yakuniy nazorat ishi"
+                value={manualTitle}
+                onChange={(e) => setManualTitle(e.target.value)}
+                className="w-full p-3.5 text-xs sm:text-sm font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                required
+              />
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Sinf</label>
-                <select 
-                  value={manualClassId} 
-                  onChange={e => setManualClassId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white dark:bg-slate-900 text-sm"
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">2. Sinfni tanlang *</label>
+                <select
+                  value={manualClassId}
+                  onChange={(e) => setManualClassId(e.target.value)}
+                  className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   {classes.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
-              
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Fan</label>
-                <input 
-                  type="text" value={manualSubject} onChange={e => setManualSubject(e.target.value)}
-                  placeholder="Masalan: Matematika"
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm dark:bg-slate-900"
-                />
-              </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Test nomi</label>
-                <input 
-                  type="text" value={manualTitle} onChange={e => setManualTitle(e.target.value)}
-                  placeholder="Algebra - 3-test"
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm dark:bg-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Sana</label>
-                <input 
-                  type="date" value={manualDate} onChange={e => setManualDate(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm dark:bg-slate-900"
-                />
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Savollar soni</label>
-                <input 
-                  type="number" min="1" max="100" value={manualQuestionCount} onChange={e => setManualQuestionCount(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm dark:bg-slate-900"
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">3. Fan</label>
+                <input
+                  type="text"
+                  placeholder="Masalan: Ona tili"
+                  value={manualSubject}
+                  onChange={(e) => setManualSubject(e.target.value)}
+                  className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Javob kaliti (ABCD)</label>
-              <textarea 
-                rows={4}
-                value={manualAnswerKey}
-                onChange={e => setManualAnswerKey(e.target.value)}
-                placeholder="1-A, 2-B, 3-C, 4-D..."
-                className="w-full px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-primary outline-none resize-none font-mono text-sm dark:bg-slate-900"
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">4. Savollar soni</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={manualQuestionCount}
+                onChange={(e) => setManualQuestionCount(e.target.value)}
+                className="w-full p-3.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
-              <p className="text-xs text-slate-400 mt-1">Har bir savol raqami va uning javobini vergul bilan ajratib kiriting.</p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-              <Button type="button" variant="outline" onClick={() => setActiveTab("list")}>Bekor qilish</Button>
-              <Button type="submit">Testni saqlash</Button>
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                5. To'g'ri javoblar kaliti (Harflar ketma-ketligi) *
+              </label>
+              <input
+                type="text"
+                placeholder="Masalan: ABCDABCDAB yoki 1A 2B 3C..."
+                value={manualAnswerKey}
+                onChange={(e) => setManualAnswerKey(e.target.value.toUpperCase())}
+                className="w-full p-4 text-xs sm:text-base font-mono uppercase font-black tracking-widest bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+              <p className="text-[11px] text-slate-500 mt-1">Harflarni ketma-ket yozishingiz mumkin (Masalan: ABDCBAACCD)</p>
             </div>
-          </form>
-        </Card>
+          </div>
+
+          <Button
+            type="submit"
+            disabled={isSubmittingManual}
+            className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-xl transition-all active:scale-98 flex items-center justify-center gap-2"
+          >
+            {isSubmittingManual ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Testni Saqlash</span>}
+          </Button>
+        </form>
       )}
 
-      {/* AI Save to Database Modal */}
+      {/* Save AI Test Modal */}
       {isAiSaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <BookmarkPlus className="w-5 h-5 text-emerald-600" />
-                Testni bazaga saqlash
-              </h3>
-              <button 
-                onClick={() => setIsAiSaveModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full space-y-4">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+              Testni qaysi sinfga biriktiramiz?
+            </h3>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Test nomi</label>
+              <input
+                type="text"
+                value={aiCustomTitle}
+                onChange={(e) => setAiCustomTitle(e.target.value)}
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+              />
             </div>
 
-            <form onSubmit={handleAiSaveToDatabase} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  Qaysi sinfga biriktiriladi?
-                </label>
-                {classes.length === 0 ? (
-                  <p className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                    Sinflar topilmadi. Avval &quot;Sinflar&quot; bo&apos;limida sinf yarating.
-                  </p>
-                ) : (
-                  <select 
-                    value={aiSelectedClassId}
-                    onChange={(e) => setAiSelectedClassId(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                  >
-                    {classes.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Sinf</label>
+              <select
+                value={aiSelectedClassId}
+                onChange={(e) => setAiSelectedClassId(e.target.value)}
+                className="w-full p-3 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+              >
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  Test nomi
-                </label>
-                <input 
-                  type="text" 
-                  value={aiCustomTitle}
-                  onChange={(e) => setAiCustomTitle(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                  placeholder="Test nomini kiriting"
-                  required
-                />
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400">
-                <p><strong>Savollar soni:</strong> {aiResult?.questions.length} ta</p>
-                <p className="mt-1"><strong>Fan:</strong> {aiFormData.subject}</p>
-                <p className="mt-1">Javob kaliti avtomatik ravishda shakllantirilib, &quot;Tekshirish&quot; moduli bilan bog&apos;lanadi.</p>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsAiSaveModalOpen(false)}
-                >
-                  Bekor qilish
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  loading={isAiSaving}
-                  disabled={classes.length === 0}
-                  leftIcon={<Check className="w-4 h-4" />}
-                >
-                  Saqlash
-                </Button>
-              </div>
-            </form>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setIsAiSaveModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={handleSaveAiTest}
+                disabled={isAiSaving}
+                className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-sm"
+              >
+                {isAiSaving ? "Saqlanmoqda..." : "Saqlash"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* A4 Print & DTM Sheet Modal */}
-      {printData && (
+      {/* DTM / A4 Print Modal */}
+      {isPrintModalOpen && printData && (
         <TestPrintModal
           isOpen={isPrintModalOpen}
           onClose={() => setIsPrintModalOpen(false)}
@@ -750,13 +750,14 @@ function TestsPageContent() {
           questions={printData.questions}
         />
       )}
+
     </div>
   );
 }
 
 export default function TestsPage() {
   return (
-    <Suspense fallback={<div className="p-12 text-center text-slate-500">Yuklanmoqda...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Yuklanmoqda...</div>}>
       <TestsPageContent />
     </Suspense>
   );

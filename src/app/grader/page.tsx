@@ -10,7 +10,6 @@ import {
   FileText, 
   BookOpen, 
   CheckCircle, 
-  Sliders, 
   Sparkles, 
   HelpCircle, 
   Edit3,
@@ -21,17 +20,24 @@ import {
   Camera,
   Type,
   Check,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Users,
+  GraduationCap,
+  Zap,
+  RefreshCw,
+  Plus
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { experimental_useObject as useObject } from '@ai-sdk/react';
 import { z } from 'zod';
 
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { fastFetch } from "@/utils/fastFetch";
-import { compressImage, compressImagesBatch } from "@/utils/imageCompressor";
+import { compressImagesBatch } from "@/utils/imageCompressor";
 import EmaktabExportModal from "@/components/EmaktabExportModal";
+import Link from "next/link";
 
 // Dynamic schema supporting Test, Dictation, and Open Question
 const dynamicSchema = z.object({
@@ -92,34 +98,26 @@ export default function Grader() {
   // Task Type
   const [taskType, setTaskType] = useState<TaskType>('TEST');
   
-  // Input mode: 'text' (manual type) | 'image' (photo of textbook/paper)
-  const [diktantInputMode, setDiktantInputMode] = useState<'text' | 'image'>('text');
-  const [openInputMode, setOpenInputMode] = useState<'text' | 'image'>('text');
-
   // Dictation parameters
   const [originalText, setOriginalText] = useState("");
-  const [diktantSourceFile, setDiktantSourceFile] = useState<File | null>(null);
-  const [diktantSourcePreview, setDiktantSourcePreview] = useState<string | null>(null);
+  const [maxErrorsSpelling, setMaxErrorsSpelling] = useState(5);
+  const [maxErrorsPunctuation, setMaxErrorsPunctuation] = useState(5);
 
-  const [maxScore, setMaxScore] = useState(20);
-  const [spellingPenalty, setSpellingPenalty] = useState(1);
-  const [punctuationPenalty, setPunctuationPenalty] = useState(0.5);
-  
-  // Open question parameters
-  const [questionText, setQuestionText] = useState("");
-  const [openSourceFile, setOpenSourceFile] = useState<File | null>(null);
-  const [openSourcePreview, setOpenSourcePreview] = useState<string | null>(null);
-  const [rubricRules, setRubricRules] = useState("Asosiy faktlar va tushunchalar: 5 ball\nMantiqiy tushuntirish: 3 ball\nXulosa va fikr ifodasi: 2 ball");
+  // Open Question parameters
+  const [openQuestionText, setOpenQuestionText] = useState("");
+  const [openSampleAnswer, setOpenSampleAnswer] = useState("");
+  const [openMaxScore, setOpenMaxScore] = useState(10);
 
-  // Student Notebooks
-  const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  // Images state
+  const [selectedImages, setSelectedImages] = useState<Array<{ data: string; mimeType: string }>>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Local editable override state for results
+  // Saved Results State
   const [editableResults, setEditableResults] = useState<any[]>([]);
-  const [showEmaktabModal, setShowEmaktabModal] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
+  // Fetch initial classes and tests
   useEffect(() => {
     fastFetch<any[]>("/api/classes").then(data => {
       if (Array.isArray(data)) {
@@ -127,791 +125,503 @@ export default function Grader() {
         if (data.length > 0) setSelectedClassId(data[0].id);
       }
     }).catch(() => {});
+
+    fastFetch<any[]>("/api/tests").then(data => {
+      if (Array.isArray(data)) {
+        setTests(data);
+        if (data.length > 0) setSelectedTestId(data[0].id);
+      }
+    }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (selectedClassId) {
-      fastFetch<any[]>(`/api/tests?classId=${selectedClassId}`).then(data => {
-        if (Array.isArray(data)) {
-          setTests(data);
-          if (data.length > 0) setSelectedTestId(data[0].id);
-          else setSelectedTestId("");
-        }
-      }).catch(() => {});
-    } else {
-      setTests([]);
-      setSelectedTestId("");
-    }
-  }, [selectedClassId]);
-
-  const { object: streamedResult, submit, isLoading } = useObject({
+  const { object: streamedResult, submit, isLoading, error } = useObject({
     api: '/api/grader',
     schema: dynamicSchema,
-    onFinish: (result) => {
-      toast.success("Barcha ishlar AI tomonidan tahlil qilindi!");
-      if (result.object?.results) {
-        setEditableResults(JSON.parse(JSON.stringify(result.object.results)));
+    onFinish: ({ object }) => {
+      if (object && object.results) {
+        setEditableResults(object.results);
+        toast.success(`AI ${object.results.length} nafar o'quvchi daftarini tekshirdi!`);
       }
     },
-    onError: () => {
-      toast.error("Tekshirishda xatolik yuz berdi. Rasmlarni tekshiring.");
+    onError: (err) => {
+      toast.error(err.message || "Tekshirishda xatolik yuz berdi");
     }
   });
 
-  // Sync streamed results to editable state while streaming
-  useEffect(() => {
-    if (streamedResult?.results && streamedResult.results.length > 0) {
-      setEditableResults(streamedResult.results);
-    }
-  }, [streamedResult]);
+  // Handle Multi Image Upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-  // Handle Diktant Source File (Textbook / Original Sheet Photo)
-  const handleDiktantSourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setDiktantSourceFile(file);
-      setDiktantSourcePreview(URL.createObjectURL(file));
-      toast.success("Diktantning asl nusxasi surati yuklandi");
-      e.target.value = '';
-    }
-  };
+    setIsCompressing(true);
+    toast.loading(`${files.length} ta rasm optimallashtirilmoqda...`, { id: "compressToast" });
 
-  // Handle Open Question Source File (Textbook / Task Sheet Photo)
-  const handleOpenSourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setOpenSourceFile(file);
-      setOpenSourcePreview(URL.createObjectURL(file));
-      toast.success("Savol/Topshiriq surati yuklandi");
-      e.target.value = '';
+    try {
+      const compressedList = await compressImagesBatch(Array.from(files));
+      setSelectedImages(prev => [...prev, ...compressedList]);
+      toast.success(`${files.length} ta rasm qo'shildi!`, { id: "compressToast" });
+    } catch {
+      toast.error("Rasmlarni yuklashda xatolik", { id: "compressToast" });
+    } finally {
+      setIsCompressing(false);
     }
   };
 
-  // Student Notebook Files Upload
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files);
-      const validFiles = newFiles.filter(f => f.type.startsWith('image/'));
-      
-      if (validFiles.length !== newFiles.length) {
-        toast.error("Faqat rasm formatidagi fayllarni yuklang (JPG, PNG)");
-      }
-      
-      const combined = [...files, ...validFiles].slice(0, 30);
-      setFiles(combined);
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, idx) => idx !== index));
+  };
 
-      // Generate thumbnail previews
-      const newPreviews = combined.map(f => URL.createObjectURL(f));
-      setPreviews(newPreviews);
-      e.target.value = '';
+  // Start AI Grader Process
+  const handleStartGrading = () => {
+    if (!selectedClassId) {
+      toast.error("Iltimos, avval sinfni tanlang");
+      return;
     }
-  };
+    if (selectedImages.length === 0) {
+      toast.error("Iltimos, kamida 1 ta daftar rasmini yuklang");
+      return;
+    }
 
-  const removeFile = (index: number) => {
-    const newFiles = files.filter((_, i) => i !== index);
-    setFiles(newFiles);
-    setPreviews(newFiles.map(f => URL.createObjectURL(f)));
-  };
+    if (taskType === 'TEST' && !selectedTestId) {
+      toast.error("Iltimos, test kalitini tanlang yoki yangi test yarating");
+      return;
+    }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedClassId) return toast.error("Iltimos, sinfni tanlang");
-    if (files.length === 0) return toast.error("Iltimos, kamida 1 ta daftar rasmini yuklang");
+    if (taskType === 'DIKTANT' && !originalText.trim()) {
+      toast.error("Iltimos, asl diktant matnini kiriting");
+      return;
+    }
+
+    if (taskType === 'OPEN_QUESTION' && !openQuestionText.trim()) {
+      toast.error("Iltimos, ochiq savol matnini kiriting");
+      return;
+    }
+
+    const payload: any = {
+      taskType,
+      classId: selectedClassId,
+      images: selectedImages
+    };
 
     if (taskType === 'TEST') {
-      const selectedTest = tests.find(t => t.id === selectedTestId);
-      if (!selectedTest) return toast.error("Iltimos, to'g'ri javob kaliti uchun testni tanlang");
-      
-      try {
-        toast.loading("Daftarlar tayyorlanmoqda...", { id: "graderLoad" });
-        const images = await readImages(files);
-        toast.dismiss("graderLoad");
-        
-        submit({
-          taskType: 'TEST',
-          classId: selectedClassId,
-          testId: selectedTest.id,
-          answerKey: selectedTest.answerKey,
-          questionCount: selectedTest.questionCount,
-          images
-        });
-      } catch (err) {
-        toast.dismiss("graderLoad");
-        toast.error("Rasmlarni o'qishda xatolik");
-      }
+      payload.testId = selectedTestId;
     } else if (taskType === 'DIKTANT') {
-      if (diktantInputMode === 'text' && !originalText.trim()) {
-        return toast.error("Iltimos, original diktant matnini yozing yoki kitobdan suratini yuklang");
-      }
-      if (diktantInputMode === 'image' && !diktantSourceFile) {
-        return toast.error("Iltimos, original diktant matni suratini yuklang");
-      }
-      
-      try {
-        toast.loading("Daftarlar tayyorlanmoqda...", { id: "graderLoad" });
-        let sourceImage: { data: string; mimeType: string } | undefined = undefined;
-        if (diktantInputMode === 'image' && diktantSourceFile) {
-          const [img] = await readImages([diktantSourceFile]);
-          sourceImage = img;
-        }
-
-        const images = await readImages(files);
-        toast.dismiss("graderLoad");
-
-        submit({
-          taskType: 'DIKTANT',
-          classId: selectedClassId,
-          originalText: diktantInputMode === 'text' ? originalText : undefined,
-          sourceImage,
-          maxScore,
-          spellingPenalty,
-          punctuationPenalty,
-          images
-        });
-      } catch (err) {
-        toast.dismiss("graderLoad");
-        toast.error("Rasmlarni o'qishda xatolik");
-      }
+      payload.dictation = {
+        originalText,
+        maxErrorsSpelling,
+        maxErrorsPunctuation
+      };
     } else if (taskType === 'OPEN_QUESTION') {
-      if (openInputMode === 'text' && !questionText.trim()) {
-        return toast.error("Iltimos, savol matnini yozing yoki darslikdan suratini yuklang");
-      }
-      if (openInputMode === 'image' && !openSourceFile) {
-        return toast.error("Iltimos, savol/topshiriq matni suratini yuklang");
-      }
-
-      try {
-        toast.loading("Daftarlar tayyorlanmoqda...", { id: "graderLoad" });
-        let sourceImage: { data: string; mimeType: string } | undefined = undefined;
-        if (openInputMode === 'image' && openSourceFile) {
-          const [img] = await readImages([openSourceFile]);
-          sourceImage = img;
-        }
-
-        const images = await readImages(files);
-        toast.dismiss("graderLoad");
-
-        submit({
-          taskType: 'OPEN_QUESTION',
-          classId: selectedClassId,
-          questionText: openInputMode === 'text' ? questionText : undefined,
-          sourceImage,
-          rubricRules,
-          maxScore,
-          images
-        });
-      } catch (err) {
-        toast.dismiss("graderLoad");
-        toast.error("Rasmlarni o'qishda xatolik");
-      }
+      payload.openQuestion = {
+        questionText: openQuestionText,
+        sampleAnswer: openSampleAnswer,
+        maxScore: openMaxScore
+      };
     }
+
+    setIsSaved(false);
+    setEditableResults([]);
+    submit(payload);
   };
 
-  const readImages = async (fileList: File[]) => {
-    return compressImagesBatch(fileList);
-  };
+  // Save Results to Database
+  const handleSaveToDatabase = async () => {
+    if (editableResults.length === 0) return;
 
-  const handleScoreChange = (index: number, newScore: number) => {
-    setEditableResults(prev => {
-      const updated = [...prev];
-      const target = { ...updated[index] };
-      target.score = newScore;
-      const mScore = target.maxScore || (taskType === 'DIKTANT' ? maxScore : 20);
-      target.percentage = Math.round((newScore / mScore) * 100);
-      updated[index] = target;
-      return updated;
-    });
-  };
-
-  const handleFeedbackChange = (index: number, newFeedback: string) => {
-    setEditableResults(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], feedback: newFeedback };
-      return updated;
-    });
-  };
-
-  const handleStudentNameChange = (index: number, newName: string) => {
-    setEditableResults(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], student_name: newName };
-      return updated;
-    });
-  };
-
-  const saveResults = async () => {
-    if (!editableResults || editableResults.length === 0) return;
-    setIsSaving(true);
-    
     try {
-      const res = await fetch("/api/attempts", {
+      const res = await fetch("/api/grader/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          testId: selectedTestId || undefined,
           classId: selectedClassId,
+          testId: taskType === 'TEST' ? selectedTestId : undefined,
           taskType,
-          title: taskType === 'DIKTANT' ? 'Diktant ishi' : taskType === 'OPEN_QUESTION' ? 'Yozma ish / Savol' : 'Test sinovi',
           results: editableResults
         })
       });
-      
+
       if (res.ok) {
-        toast.success("Tasdiqlangan natijalar bazaga muvaffaqiyatli saqlandi!");
+        setIsSaved(true);
+        toast.success("Natijalar bazaga va hisobotga muvaffaqiyatli saqlandi!");
       } else {
         toast.error("Saqlashda xatolik yuz berdi");
       }
-    } catch (err) {
-      toast.error("Saqlashda xatolik yuz berdi");
-    } finally {
-      setIsSaving(false);
+    } catch {
+      toast.error("Tarmoq xatosi");
     }
   };
 
-  const hasResults = editableResults && editableResults.length > 0;
+  const activeResults = editableResults.length > 0 ? editableResults : (streamedResult?.results || []);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Header & 3-Mode Selector */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center shadow-xs shrink-0">
-            <CheckSquare className="w-6 h-6 sm:w-7 sm:h-7" />
+    <div className="max-w-5xl mx-auto space-y-8 pb-24 animate-in fade-in duration-300">
+      
+      {/* Header */}
+      <SectionHeader
+        title="AI Tekshirish Markazi"
+        subtitle="Daftar, test javoblari yoki diktant rasmlarini yuklang — AI bir necha soniyada xatolarni aniqlab, baholaydi."
+      />
+
+      {/* 3-Step Guided Workflow Card */}
+      <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-8">
+        
+        {/* Step 1: Select Class */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black">
+                1
+              </span>
+              <span>Sinfni tanlang</span>
+            </h3>
+            <Link href="/classes" className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+              <Plus className="w-3.5 h-3.5" />
+              <span>Yangi sinf qo'shish</span>
+            </Link>
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-              AI Tekshirish
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              Qog&apos;oz daftarlarni suratga oling — AI tekshiradi, siz tasdiqlaysiz.
-            </p>
-          </div>
-        </div>
 
-        {/* 3 Main Mode Pills */}
-        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
-          <button
-            type="button"
-            onClick={() => setTaskType('TEST')}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-              taskType === 'TEST' 
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <CheckSquare className="w-4 h-4" />
-            <span>Test (ABCD)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTaskType('DIKTANT')}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-              taskType === 'DIKTANT' 
-                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Edit3 className="w-4 h-4" />
-            <span>Diktant</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTaskType('OPEN_QUESTION')}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-              taskType === 'OPEN_QUESTION' 
-                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Ochiq Savol</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Grid: Parameters on Left, Live Results on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 items-start">
-        {/* Left Form Card */}
-        <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs">
-          <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
-            {/* 1. Sinfni tanlash */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                1. Sinfni tanlang
-              </label>
-              <select 
-                value={selectedClassId} 
-                onChange={e => setSelectedClassId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm text-slate-900 dark:text-slate-100"
-              >
-                {classes.length === 0 && <option value="">Sinflar yo&apos;q (Sinflar bo&apos;limidan qo&apos;shing)</option>}
-                {classes.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+          {classes.length === 0 ? (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between">
+              <span>Sizda hali sinflar ro'yxati mavjud emas.</span>
+              <Link href="/classes" className="px-3 py-1.5 bg-amber-600 text-white font-bold rounded-xl">
+                Sinf yaratish
+              </Link>
             </div>
-
-            {/* Mode 1: TEST FIELDS */}
-            {taskType === 'TEST' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                  2. Mavjud Test Kalitini Tanlang
-                </label>
-                <select 
-                  value={selectedTestId} 
-                  onChange={e => setSelectedTestId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary outline-none text-sm text-slate-900 dark:text-slate-100"
-                  disabled={!selectedClassId || tests.length === 0}
-                >
-                  {tests.length === 0 && <option value="">Bu sinfda hali testlar mavjud emas</option>}
-                  {tests.map(t => (
-                    <option key={t.id} value={t.id}>{t.title} ({t.questionCount} ta savol)</option>
-                  ))}
-                </select>
-                {tests.length === 0 && (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Avval &quot;Test&quot; bo&apos;limidan javob kalitini kiriting yoki AI orqali yarating.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Mode 2: DIKTANT FIELDS (Text or Photo of Book) */}
-            {taskType === 'DIKTANT' && (
-              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    2. Asl Diktant Matni
-                  </label>
-                  {/* Mode switcher: Matn yozish vs Suratga olish */}
-                  <div className="flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setDiktantInputMode('text')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        diktantInputMode === 'text' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-xs' : 'text-slate-400'
-                      }`}
-                    >
-                      <Type className="w-3 h-3" />
-                      <span>Matn</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDiktantInputMode('image')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        diktantInputMode === 'image' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-xs' : 'text-slate-400'
-                      }`}
-                    >
-                      <Camera className="w-3 h-3" />
-                      <span>Surat (Kitob)</span>
-                    </button>
-                  </div>
-                </div>
-
-                {diktantInputMode === 'text' ? (
-                  <textarea
-                    rows={4}
-                    value={originalText}
-                    onChange={e => setOriginalText(e.target.value)}
-                    placeholder="Darsda aytilgan to'g'ri diktant matnini bu yerga yozing..."
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    required={diktantInputMode === 'text'}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    {!diktantSourcePreview ? (
-                      <div className="relative border-2 border-dashed border-emerald-300 dark:border-emerald-800 hover:border-emerald-500 rounded-xl p-3 text-center cursor-pointer transition-colors bg-emerald-50/30 dark:bg-emerald-950/20">
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleDiktantSourceChange}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          required={diktantInputMode === 'image'}
-                        />
-                        <Camera className="w-6 h-6 text-emerald-600 dark:text-emerald-400 mx-auto mb-1" />
-                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                          Darslik yoki varaqdagi diktant matnini suratga oling
-                        </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          AI kitobdagi matnni avtomatik o&apos;qib, o&apos;quvchilar bilan solishtiradi
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="relative rounded-xl overflow-hidden border border-emerald-200 dark:border-emerald-800 p-2 bg-emerald-50/40 dark:bg-emerald-950/30 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={diktantSourcePreview} alt="diktant source" className="w-12 h-12 object-cover rounded-lg border" />
-                          <div>
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[180px]">
-                              {diktantSourceFile?.name || "Original matn surati"}
-                            </p>
-                            <span className="text-[10px] text-emerald-600 font-semibold">✓ Surat tayyor</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { setDiktantSourceFile(null); setDiktantSourcePreview(null); }}
-                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg"
-                          title="O'chirish"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Score & Penalty Settings */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Maks. ball</label>
-                    <input 
-                      type="number" 
-                      value={maxScore} 
-                      onChange={e => setMaxScore(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-center text-slate-900 dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Imlo (-ball)</label>
-                    <input 
-                      type="number" step="0.5" 
-                      value={spellingPenalty} 
-                      onChange={e => setSpellingPenalty(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-center text-red-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Tinish (-ball)</label>
-                    <input 
-                      type="number" step="0.5" 
-                      value={punctuationPenalty} 
-                      onChange={e => setPunctuationPenalty(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-center text-amber-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Mode 3: OPEN QUESTION FIELDS (Text or Photo of Book) */}
-            {taskType === 'OPEN_QUESTION' && (
-              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    2. Savol yoki Topshiriq
-                  </label>
-                  {/* Mode switcher: Matn yozish vs Suratga olish */}
-                  <div className="flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setOpenInputMode('text')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        openInputMode === 'text' ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-xs' : 'text-slate-400'
-                      }`}
-                    >
-                      <Type className="w-3 h-3" />
-                      <span>Matn</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOpenInputMode('image')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        openInputMode === 'image' ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-xs' : 'text-slate-400'
-                      }`}
-                    >
-                      <Camera className="w-3 h-3" />
-                      <span>Surat (Kitob)</span>
-                    </button>
-                  </div>
-                </div>
-
-                {openInputMode === 'text' ? (
-                  <textarea
-                    rows={3}
-                    value={questionText}
-                    onChange={e => setQuestionText(e.target.value)}
-                    placeholder="Masalan: Amir Temurning davlat boshqaruvidagi islohotlarini yoritib bering..."
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                    required={openInputMode === 'text'}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    {!openSourcePreview ? (
-                      <div className="relative border-2 border-dashed border-blue-300 dark:border-blue-800 hover:border-blue-500 rounded-xl p-3 text-center cursor-pointer transition-colors bg-blue-50/30 dark:bg-blue-950/20">
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleOpenSourceChange}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          required={openInputMode === 'image'}
-                        />
-                        <Camera className="w-6 h-6 text-blue-600 dark:text-blue-400 mx-auto mb-1" />
-                        <p className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                          Darslik yoki varaqdagi topshiriqni suratga oling
-                        </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          AI kitobdagi savolni o&apos;qib, o&apos;quvchilar javoblarini baholaydi
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="relative rounded-xl overflow-hidden border border-blue-200 dark:border-blue-800 p-2 bg-blue-50/40 dark:bg-blue-950/30 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={openSourcePreview} alt="open source" className="w-12 h-12 object-cover rounded-lg border" />
-                          <div>
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[180px]">
-                              {openSourceFile?.name || "Savol surati"}
-                            </p>
-                            <span className="text-[10px] text-blue-600 font-semibold">✓ Surat tayyor</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { setOpenSourceFile(null); setOpenSourcePreview(null); }}
-                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg"
-                          title="O'chirish"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                    Baholash Mezonlari (Rubrika)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={rubricRules}
-                    onChange={e => setRubricRules(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 3. Student Notebooks Upload Area */}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  3. O&apos;quvchilar Daftarlari ({files.length}/30 ta rasm)
-                </label>
-                {files.length > 0 && (
-                  <button 
-                    type="button" 
-                    onClick={() => { setFiles([]); setPreviews([]); }}
-                    className="text-[11px] text-red-500 hover:underline"
-                  >
-                    Tozalash
-                  </button>
-                )}
-              </div>
-
-              <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-primary/60 rounded-2xl p-4 text-center cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/40">
-                <input 
-                  type="file" 
-                  multiple 
-                  accept="image/*" 
-                  onChange={handleFileChange}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-                <Upload className="w-7 h-7 text-slate-400 mx-auto mb-1" />
-                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Daftar suratlarini yuklang
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  1 tadan 30 tagacha daftarni bir vaqtda tanlang
-                </p>
-              </div>
-
-              {/* Thumbnails list */}
-              {previews.length > 0 && (
-                <div className="grid grid-cols-4 gap-2 mt-3 max-h-36 overflow-y-auto custom-scrollbar p-1">
-                  {previews.map((src, idx) => (
-                    <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-xs">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={src} alt="daftar" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removeFile(idx)}
-                        className="absolute top-1 right-1 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity text-[10px]"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              disabled={isLoading || files.length === 0}
-              className={`w-full h-11 text-sm font-bold text-white shadow-xs ${
-                taskType === 'TEST' ? 'bg-indigo-600 hover:bg-indigo-700' :
-                taskType === 'DIKTANT' ? 'bg-emerald-600 hover:bg-emerald-700' :
-                'bg-blue-600 hover:bg-blue-700'
-              }`}
-              leftIcon={<Sparkles className="w-4 h-4" />}
-            >
-              {isLoading ? "AI Daftarlarni tekshirmoqda..." : `${files.length} ta ishni AI orqali tekshirish`}
-            </Button>
-          </form>
-        </Card>
-
-        {/* Right Results Panel */}
-        <div className="space-y-4">
-          {!hasResults ? (
-            <Card className="p-12 text-center bg-white dark:bg-slate-800 border-dashed min-h-[400px] flex flex-col items-center justify-center">
-              <div className="w-14 h-14 rounded-3xl bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center mb-3">
-                <CheckSquare className="w-7 h-7" />
-              </div>
-              <h3 className="font-bold text-slate-700 dark:text-slate-300 text-base">
-                Natijalar bu yerda ko&apos;rinadi
-              </h3>
-              <p className="text-xs text-slate-400 max-w-sm mt-1">
-                Chap tarafdan sinf va daftarlar rasmlarini yuklang, so&apos;ngra &quot;Tekshirish&quot; tugmasini bosing.
-              </p>
-            </Card>
           ) : (
-            <div className="space-y-4">
-              {/* Results Action Bar */}
-              <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-                <div>
-                  <h3 className="font-black text-slate-900 dark:text-slate-100 text-base">
-                    Tekshirilgan daftarlar ({editableResults.length})
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Ball yoki izohni joyida o&apos;zgartirishingiz mumkin.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => setShowEmaktabModal(true)}
-                    variant="outline"
-                    className="h-9 text-xs border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950/50"
-                    leftIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
-                  >
-                    eMaktab & Excel
-                  </Button>
-                  <Button
-                    onClick={saveResults}
-                    disabled={isSaving}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 text-xs"
-                    leftIcon={<Check className="w-4 h-4" />}
-                  >
-                    {isSaving ? "Saqlanmoqda..." : "Tasdiqlash va Bazaga Saqlash"}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Student Result Cards */}
-              <div className="space-y-3">
-                {editableResults.map((res: any, idx: number) => (
-                  <Card key={idx} className="p-4 sm:p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
-                          {idx + 1}
-                        </div>
-                        <input
-                          type="text"
-                          value={res.student_name || `O'quvchi ${idx + 1}`}
-                          onChange={(e) => handleStudentNameChange(idx, e.target.value)}
-                          className="font-bold text-base bg-transparent border-b border-transparent hover:border-slate-300 focus:border-primary outline-none text-slate-900 dark:text-slate-100"
-                        />
-                        {res.needsReview && (
-                          <span className="text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" /> Ko&apos;rib chiqish tavsiya etiladi
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Score Input */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-400">Ball:</span>
-                        <input
-                          type="number"
-                          value={res.score ?? 0}
-                          onChange={(e) => handleScoreChange(idx, Number(e.target.value))}
-                          className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-black text-center text-indigo-600 dark:text-indigo-400"
-                        />
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg">
-                          {res.percentage ?? 0}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Dictation Errors Breakdown */}
-                    {taskType === 'DIKTANT' && res.errorsList && res.errorsList.length > 0 && (
-                      <div className="p-3 bg-red-50/50 dark:bg-red-950/20 rounded-xl border border-red-100 dark:border-red-900/40 text-xs space-y-1">
-                        <span className="font-bold text-red-600 dark:text-red-400 block mb-1">Aniqlangan xatolar:</span>
-                        {res.errorsList.map((err: any, eIdx: number) => (
-                          <div key={eIdx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                            <span className="px-1.5 py-0.2 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded text-[10px] font-bold">
-                              {err.type}
-                            </span>
-                            <span>&quot;{err.written}&quot; ➡️ &quot;{err.original}&quot; ({err.explanation})</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Open Question Rubric Breakdown */}
-                    {taskType === 'OPEN_QUESTION' && res.criteriaBreakdown && (
-                      <div className="grid sm:grid-cols-3 gap-2">
-                        {res.criteriaBreakdown.map((crit: any, cIdx: number) => (
-                          <div key={cIdx} className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 text-xs">
-                            <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300 mb-0.5">
-                              <span className="truncate">{crit.criterion}</span>
-                              <span className="text-indigo-600 dark:text-indigo-400">{crit.awardedPoints}/{crit.maxPoints}</span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 truncate">{crit.feedback}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Feedback */}
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">O&apos;qituvchi izohi (Feedback):</label>
-                      <input
-                        type="text"
-                        value={res.feedback || ""}
-                        onChange={(e) => handleFeedbackChange(idx, e.target.value)}
-                        className="w-full mt-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 outline-none focus:border-primary"
-                        placeholder="O'quvchiga izoh yozing..."
-                      />
-                    </div>
-                  </Card>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {classes.map((cls) => (
+                <button
+                  key={cls.id}
+                  type="button"
+                  onClick={() => setSelectedClassId(cls.id)}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    selectedClassId === cls.id
+                      ? 'bg-indigo-50 border-indigo-600 text-indigo-900 font-bold dark:bg-indigo-950/60 dark:border-indigo-500 dark:text-indigo-200 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="text-xs sm:text-sm font-bold">{cls.name}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{cls._count?.students || 0} nafar o'quvchi</div>
+                </button>
+              ))}
             </div>
           )}
         </div>
+
+        {/* Step 2: Task Type & Reference Key */}
+        <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black">
+              2
+            </span>
+            <span>Topshiriq turini va kalitini tanlang</span>
+          </h3>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setTaskType('TEST')}
+              className={`p-3.5 rounded-2xl border text-center transition-all ${
+                taskType === 'TEST'
+                  ? 'bg-indigo-600 text-white font-bold shadow-md'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <div className="text-xs sm:text-sm font-bold">🟢 Test (ABCD)</div>
+              <div className="text-[10px] opacity-80 mt-0.5">Javob varaqasi</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTaskType('DIKTANT')}
+              className={`p-3.5 rounded-2xl border text-center transition-all ${
+                taskType === 'DIKTANT'
+                  ? 'bg-indigo-600 text-white font-bold shadow-md'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <div className="text-xs sm:text-sm font-bold">🔵 Diktant / Matn</div>
+              <div className="text-[10px] opacity-80 mt-0.5">Imlo xatolari</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTaskType('OPEN_QUESTION')}
+              className={`p-3.5 rounded-2xl border text-center transition-all ${
+                taskType === 'OPEN_QUESTION'
+                  ? 'bg-indigo-600 text-white font-bold shadow-md'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <div className="text-xs sm:text-sm font-bold">🟣 Ochiq savol</div>
+              <div className="text-[10px] opacity-80 mt-0.5">Matnli tahlil</div>
+            </button>
+          </div>
+
+          {/* Type Specific Fields */}
+          {taskType === 'TEST' && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Qaysi test kaliti bo'yicha tekshiriladi? *
+                </label>
+                <Link href="/tests" className="text-xs font-bold text-indigo-600 hover:underline">
+                  + Yangi test yaratish
+                </Link>
+              </div>
+
+              {tests.length === 0 ? (
+                <div className="text-xs text-amber-600">
+                  Sizda testlar kaliti mavjud emas. Iltimos, <Link href="/tests" className="underline font-bold">Testlar bo'limida</Link> test kalitini kiriting.
+                </div>
+              ) : (
+                <select
+                  value={selectedTestId}
+                  onChange={(e) => setSelectedTestId(e.target.value)}
+                  className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                >
+                  {tests.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.title} ({t.subject}) • {t.questionCount} ta savol • Kalit: {t.answerKey || 'Mavjud'}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {taskType === 'DIKTANT' && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Asl diktant matnini kiriting *
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Diktantning to'g'ri matnini shu yerga yozing yoki nusxalab qo'ying..."
+                value={originalText}
+                onChange={(e) => setOriginalText(e.target.value)}
+                className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          )}
+
+          {taskType === 'OPEN_QUESTION' && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Ochiq savol matni *
+              </label>
+              <input
+                type="text"
+                placeholder="Masalan: Fotosintez jarayonining ahamiyatini tushuntiring."
+                value={openQuestionText}
+                onChange={(e) => setOpenQuestionText(e.target.value)}
+                className="w-full p-3.5 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Step 3: Upload Student Notebooks */}
+        <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black">
+                3
+              </span>
+              <span>O'quvchi daftarlari rasmlarini yuklang</span>
+            </h3>
+            <span className="text-xs font-bold text-indigo-600">
+              {selectedImages.length} ta rasm tanlandi
+            </span>
+          </div>
+
+          {/* Upload Dropzone */}
+          <label className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-600 dark:hover:border-indigo-500 rounded-3xl p-8 text-center cursor-pointer transition-all bg-slate-50/70 dark:bg-slate-800/40 hover:bg-slate-50 flex flex-col items-center justify-center gap-3 group">
+            <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
+              <Camera className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <span className="text-sm font-bold text-slate-900 dark:text-slate-100 block">
+                Daftar yoki test varaqasi rasmlarini tanlang
+              </span>
+              <span className="text-xs text-slate-500 block">
+                Bir vaqtning o'zida bir nechta rasm yuklashingiz mumkin (Kameradan yoki Galereyadan)
+              </span>
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+          </label>
+
+          {/* Image Previews */}
+          {selectedImages.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+              {selectedImages.map((img, idx) => (
+                <div key={idx} className="relative group rounded-2xl overflow-hidden border border-slate-200 aspect-square shadow-xs">
+                  <img 
+                    src={`data:${img.mimeType};base64,${img.data}`} 
+                    alt={`Daftar ${idx + 1}`} 
+                    className="w-full h-full object-cover" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(idx)}
+                    className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-lg opacity-80 hover:opacity-100 transition-opacity"
+                    title="O'chirish"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[10px] font-bold rounded-md">
+                    #{idx + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Live Credit Cost Notice & Submit CTA */}
+          <div className="pt-4 space-y-3">
+            <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <span>Tekshirish qiymati:</span>
+              </span>
+              <b className="text-slate-900 dark:text-slate-100 font-bold">
+                {selectedImages.length > 0 ? `${selectedImages.length} ta AI kredit` : "0 ta kredit"}
+              </b>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleStartGrading}
+              disabled={isLoading || isCompressing || selectedImages.length === 0}
+              className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-xl transition-all active:scale-98 flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>AI Daftarlarni tekshirmoqda...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                  <span>AI Orqali Tekshirishni Boshlash ({selectedImages.length} ta daftar)</span>
+                </>
+              )}
+            </Button>
+          </div>
+
+        </div>
+
       </div>
 
-      {/* eMaktab Kundalik Export Modal */}
-      {showEmaktabModal && (
+      {/* Results Dashboard */}
+      {activeResults.length > 0 && (
+        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <div>
+              <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">
+                Tekshirish Natijalari ({activeResults.length} nafar o'quvchi)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">Baholarni tekshirib, eMaktab yoki hisobotga saqlashingiz mumkin</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>eMaktab Eksport</span>
+              </button>
+
+              <button
+                onClick={handleSaveToDatabase}
+                disabled={isSaved}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSaved ? "Saqlangan ✅" : "Bazaga Saqlash"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Student Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeResults.map((res, i) => (
+              <div
+                key={i}
+                className="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                      {res.student_name}
+                    </h4>
+                    <span className="text-[11px] text-slate-400">Variant: {res.variant || 'A'}</span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className={`px-3 py-1 text-sm font-black rounded-full ${
+                      res.percentage >= 86 ? 'bg-emerald-100 text-emerald-800' :
+                      res.percentage >= 70 ? 'bg-blue-100 text-blue-800' :
+                      res.percentage >= 55 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {res.score} ball ({res.percentage}%)
+                    </span>
+                  </div>
+                </div>
+
+                {res.feedback && (
+                  <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl">
+                    {res.feedback}
+                  </p>
+                )}
+
+                {/* Question Answers Details if Test */}
+                {res.answers && (
+                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 pt-2">
+                    {res.answers.map((ans: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className={`p-1 rounded-lg text-center text-[10px] font-bold ${
+                          ans.isCorrect
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                        title={`${ans.question}-savol: ${ans.studentAnswer} (To'g'ri: ${ans.correctAnswer})`}
+                      >
+                        {ans.question}:{ans.studentAnswer}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}
+
+      {/* eMaktab Modal */}
+      {isExportModalOpen && (
         <EmaktabExportModal
-          isOpen={showEmaktabModal}
-          onClose={() => setShowEmaktabModal(false)}
-          title={taskType === 'TEST' ? "Test natijalari" : taskType === 'DIKTANT' ? "Diktant baholari" : "Yozma ish baholari"}
-          className={classes.find(c => c.id === selectedClassId)?.name || "Sinf"}
-          subject={taskType === 'DIKTANT' ? "Ona tili (Diktant)" : "Fan"}
-          results={editableResults.map(r => ({
-            name: r.student_name || "O'quvchi",
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          results={activeResults.map(r => ({
+            name: r.student_name,
             score: r.score,
-            maxScore: r.maxScore || (taskType === 'DIKTANT' ? maxScore : 20),
             percentage: r.percentage
           }))}
+          title={tests.find(t => t.id === selectedTestId)?.title || "Daftar tekshiruvi"}
         />
       )}
+
     </div>
   );
 }
