@@ -123,7 +123,67 @@ export default function PricingPage() {
         </p>
       </div>
 
-      {/* 2. Current Subscription Status Card (If Logged In) */}
+      {/* 2. License Key Quick Activation Card (Prominently at the Top) */}
+      <div className="bg-gradient-to-r from-indigo-50 via-white to-indigo-50/50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 rounded-3xl p-6 sm:p-8 border-2 border-indigo-200 dark:border-indigo-800 shadow-md space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-sm">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>Kalitni faollashtirish</span>
+                <span className="px-2.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-full">
+                  @Novdaaibot
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Telegram botdan olingan litsenziya kalitini kiriting va tarifingizni bir zumda ishga tushiring:
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start sm:self-auto text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1 hover:underline"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Kalit olish (@Novdaaibot)</span>
+          </a>
+        </div>
+
+        <form onSubmit={handleActivate} className="flex flex-col sm:flex-row gap-3 pt-1">
+          <input
+            type="text"
+            placeholder="Masalan: PRO-2026-XXXXX yoki START-XXXXX"
+            value={licenseKey}
+            onChange={(e) => setLicenseKey(e.target.value)}
+            disabled={activating}
+            className="flex-1 px-4 py-3.5 text-sm bg-white dark:bg-slate-800/90 border-2 border-indigo-100 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-mono shadow-xs"
+          />
+          <button
+            type="submit"
+            disabled={activating}
+            className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-sm rounded-2xl shadow-md hover:shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all shrink-0 active:scale-98"
+          >
+            {activating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Tekshirilmoqda...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Faollashtirish</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* 3. Current Subscription Status Card (If Logged In) */}
       {status && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
@@ -616,51 +676,6 @@ export default function PricingPage() {
         >
           Havolani olish
         </a>
-      </div>
-
-      {/* 7. License Key Activation Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl">
-            <KeyRound className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-              Telegram Bot orqali olingan kalit bormi?
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              @Novdaaibot orqali to'lov qilib olgan kalitingizni kiriting va tarifingizni bir zumda faollashtiring.
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleActivate} className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            placeholder="Masalan: PRO-2026-XXXXX yoki START-XXXXX"
-            value={licenseKey}
-            onChange={(e) => setLicenseKey(e.target.value)}
-            disabled={activating}
-            className="flex-1 px-4 py-3.5 text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-mono"
-          />
-          <button
-            type="submit"
-            disabled={activating}
-            className="px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-2xl shadow-sm flex items-center justify-center gap-2 transition-all shrink-0 active:scale-98"
-          >
-            {activating ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Tekshirilmoqda...</span>
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Faollashtirish</span>
-              </>
-            )}
-          </button>
-        </form>
       </div>
 
       {/* Info Modal Component */}
