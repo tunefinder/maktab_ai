@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   Home, 
+  Users,
   BookOpen, 
   FileSignature, 
-  CheckSquare, 
-  User 
+  CheckSquare 
 } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -24,6 +24,12 @@ export default function BottomNav() {
       href: "/",
       icon: Home,
       exact: true
+    },
+    {
+      id: "classes",
+      name: "Sinflar",
+      href: "/classes",
+      icon: Users
     },
     {
       id: "lesson-planner",
@@ -43,12 +49,6 @@ export default function BottomNav() {
       name: "Tekshirish",
       href: "/grader",
       icon: CheckSquare
-    },
-    {
-      id: "profile",
-      name: "Profil",
-      href: "/settings",
-      icon: User
     }
   ];
 

@@ -20,13 +20,13 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { name: "Asosiy", href: "/", icon: LayoutDashboard },
+  { name: "Sinflar", href: "/classes", icon: Users },
   { name: "Dars Rejasi", href: "/lesson-planner", icon: BookOpen },
   { name: "Testlar", href: "/tests", icon: FileSignature },
   { name: "Tekshirish", href: "/grader", icon: CheckSquare },
-  { name: "Sinflar", href: "/classes", icon: Users },
   { name: "Hisobot", href: "/report", icon: FileBarChart },
   { name: "Tariflar", href: "/pricing", icon: Crown },
-  { name: "Sozlanmalar", href: "/settings", icon: Settings },
+  { name: "Sozlamalar", href: "/settings", icon: Settings },
 ];
 
 export default function Sidebar() {
