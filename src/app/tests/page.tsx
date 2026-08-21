@@ -526,7 +526,7 @@ function TestsPageContent() {
               ) : (
                 <>
                   <Sparkles className="w-5 h-5 text-amber-300" />
-                  <span>Test Savollarini Yaratish (2 AI kredit)</span>
+                  <span>AI orqali Test Savollarini Yaratish</span>
                 </>
               )}
             </Button>

@@ -1,5 +1,5 @@
 export type PlanType = 'FREE' | 'START' | 'PRO' | 'MAX' | 'MAKTAB_PRO' | 'MAKTAB_VIP';
-export type AiPackType = 'PACK_500' | 'PACK_1000';
+export type AiPackType = 'PACK_1000' | 'PACK_3000' | 'PACK_7000' | 'PACK_500'; // PACK_500 kept for legacy key compatibility
 export type LicenseKeyPlan = PlanType | AiPackType | 'VIP'; // VIP alias for backward compatibility
 
 export interface PlanDetails {
@@ -13,11 +13,13 @@ export interface PlanDetails {
   period: string;
   durationDays: number;
   description: string;
+  tagline?: string;
+  ctaText?: string;
   maxTeachers: number;
   maxClasses: number; // -1 for unlimited
   maxLessons: number; // -1 for unlimited (standard)
   maxTests: number; // -1 for unlimited (standard)
-  maxAiCredits: number;
+  maxAiCredits: number; // Teacher-facing: "AI limiti"
   canExportReports: boolean;
   hasSchoolRating: boolean;
   support: string;
@@ -37,54 +39,58 @@ export const PLANS: Record<PlanType, PlanDetails> = {
   FREE: {
     id: 'FREE',
     name: 'Bepul Sinov',
-    badge: 'Sinov',
-    price: '0',
+    badge: '7 kunlik sinov',
+    price: '0 so\'m',
     priceNumber: 0,
-    period: 'boshlang\'ich',
+    period: '7 kun',
     durationDays: 7,
-    description: 'Yangi foydalanuvchilar uchun dastlabki sinov imkoniyati',
+    description: 'Yangi ustozlar uchun platformani to\'liq sinab ko\'rish imkoniyati',
+    tagline: 'Karta ma\'lumoti talab qilinmaydi.',
+    ctaText: '7 kun bepul boshlash',
     maxTeachers: 1,
     maxClasses: 1,
     maxLessons: 5,
-    maxTests: 3,
-    maxAiCredits: 20,
+    maxTests: 5,
+    maxAiCredits: 100,
     canExportReports: false,
     hasSchoolRating: false,
     support: 'Standart',
     features: [
       '1 ta o\'qituvchi',
       '1 ta sinf',
-      '5 ta dars',
-      '3 ta test',
-      '20 ta AI tekshirish'
+      '5 ta dars rejasi',
+      '5 ta test',
+      '100 AI limiti',
+      'Oddiy hisobotlar'
     ]
   },
   START: {
     id: 'START',
     name: 'START',
-    badge: 'Start',
-    price: '39 000 so\'m',
-    priceNumber: 39000,
+    badge: 'Sinab ko\'rish',
+    price: '19 000 so\'m',
+    priceNumber: 19000,
     period: 'oyiga',
     durationDays: 30,
     description: 'Yakka tartibdagi repetitor va boshlang\'ich ustozlar uchun',
+    tagline: 'AI yordamchini kundalik ishida sinab ko\'rmoqchi bo\'lgan ustozlar uchun.',
+    ctaText: '19 000 so\'mga boshlash',
     maxTeachers: 1,
     maxClasses: 2,
-    maxLessons: 40,
+    maxLessons: 30,
     maxTests: 30,
-    maxAiCredits: 150,
+    maxAiCredits: 1500,
     canExportReports: false,
     hasSchoolRating: false,
     support: 'Standart',
     features: [
       '1 ta o\'qituvchi',
       '2 ta sinf',
-      '40 ta dars',
+      '30 ta dars rejasi',
       '30 ta test',
-      '150 ta AI tekshirish',
+      '1 500 AI limiti',
       'Oddiy hisobotlar',
-      'Sinflar bo\'yicha natijalar',
-      'Standart support'
+      'Standart yordam'
     ]
   },
   PRO: {
@@ -92,59 +98,62 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     name: 'PRO',
     badge: '⭐ Eng ommabop',
     isPopular: true,
-    price: '69 000 so\'m',
-    priceNumber: 69000,
+    price: '39 000 so\'m',
+    priceNumber: 39000,
     period: 'oyiga',
     durationDays: 30,
-    description: 'Faol maktab o\'qituvchilari va fidoiy ustozlar uchun',
+    description: 'Faol maktab o\'qituvchilari va fidoyi ustozlar uchun',
+    tagline: 'Har kuni dars o\'tadigan va daftarlarni tez tekshiruvchi ustozlar uchun eng maqbul tanlov.',
+    ctaText: 'PRO ni tanlash',
     maxTeachers: 1,
     maxClasses: 6,
     maxLessons: 100,
     maxTests: 100,
-    maxAiCredits: 500,
+    maxAiCredits: 3200,
     canExportReports: true,
     hasSchoolRating: false,
     support: 'Ustuvor',
     features: [
       '1 ta o\'qituvchi',
       '6 ta sinf',
-      '100 ta dars',
+      '100 ta dars rejasi',
       '100 ta test',
-      '500 ta AI tekshirish',
+      '3 200 AI limiti',
       'Kengaytirilgan hisobotlar',
       'O\'quvchilar progressi',
-      'Natijalarni eksport qilish (PDF/Excel)',
-      'Ustuvor support'
+      'PDF / Excel eksport',
+      'Ustuvor yordam'
     ]
   },
   MAX: {
     id: 'MAX',
     name: 'MAX',
     badge: 'Kengaytirilgan',
-    price: '119 000 so\'m',
-    priceNumber: 119000,
+    price: '69 000 so\'m',
+    priceNumber: 69000,
     period: 'oyiga',
     durationDays: 30,
     description: 'Katta yuklamali o\'qituvchilar va o\'quv markazlari uchun',
+    tagline: 'Katta yuklama va bir nechta parallel sinflarni o\'qituvchi ustozlar uchun.',
+    ctaText: 'MAX ni tanlash',
     maxTeachers: 2,
     maxClasses: 15,
     maxLessons: 300,
     maxTests: 300,
-    maxAiCredits: 1000,
+    maxAiCredits: 6000,
     canExportReports: true,
     hasSchoolRating: true,
     support: 'Ustuvor',
     features: [
       '2 ta o\'qituvchi',
       '15 ta sinf',
-      '300 ta dars',
+      '300 ta dars rejasi',
       '300 ta test',
-      '1 000 ta AI tekshirish',
+      '6 000 AI limiti',
       'To\'liq analitika',
       'Sinflarni solishtirish',
-      'O\'quvchi progress tarixi',
-      'Eksport imkoniyati',
-      'Ustuvor support'
+      'PDF / Excel eksport',
+      'Ustuvor yordam'
     ]
   },
   MAKTAB_PRO: {
@@ -152,30 +161,32 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     name: 'Maktab PRO',
     badge: '🏫 Maktablar uchun',
     isSchool: true,
-    price: '229 000 so\'m',
-    priceNumber: 229000,
+    price: '129 000 so\'m',
+    priceNumber: 129000,
     period: 'oyiga',
     durationDays: 30,
-    description: 'Maktablar va IDUM metodik birlashmalari uchun',
+    description: 'Maktablar va metodik birlashmalar uchun',
+    tagline: 'Butun bir kafedra yoki maktab metodik birlashmasi uchun umumiy hisob.',
+    ctaText: 'Maktab PRO ni tanlash',
     maxTeachers: 5,
     maxClasses: 50,
     maxLessons: 1000,
     maxTests: 1000,
-    maxAiCredits: 2200,
+    maxAiCredits: 11000,
     canExportReports: true,
     hasSchoolRating: true,
     support: 'Priority',
     features: [
       '5 ta o\'qituvchi',
       '50 ta sinf',
-      '1 000 ta dars',
+      '1 000 ta dars rejasi',
       '1 000 ta test',
-      '2 200 ta AI tekshirish',
+      '11 000 AI limiti',
       'Maktab dashboardi',
       'O\'qituvchilar statistikasi',
-      'Sinflar kesimida analitika',
-      'To\'liq hisobot va PDF/Excel eksport',
-      'Priority support'
+      'Sinf analitikasi',
+      'PDF / Excel eksport',
+      'Priority yordam'
     ]
   },
   MAKTAB_VIP: {
@@ -183,16 +194,18 @@ export const PLANS: Record<PlanType, PlanDetails> = {
     name: 'Maktab VIP',
     badge: '👑 VIP Maktab',
     isSchool: true,
-    price: '399 000 so\'m',
-    priceNumber: 399000,
+    price: '199 000 so\'m',
+    priceNumber: 199000,
     period: 'oyiga',
     durationDays: 30,
     description: 'Katta maktablar, xususiy maktablar va liseylar uchun',
+    tagline: 'Butun maktab jamoasi uchun cheksiz sinf va darslar, shaxsiy menejer ko\'magi.',
+    ctaText: 'Maktab VIP ni tanlash',
     maxTeachers: 15,
     maxClasses: -1, // Cheksiz
     maxLessons: -1, // Cheksiz oddiy dars
     maxTests: -1, // Cheksiz oddiy test
-    maxAiCredits: 4000,
+    maxAiCredits: 17000,
     canExportReports: true,
     hasSchoolRating: true,
     support: '24/7 Shaxsiy menejer',
@@ -201,46 +214,70 @@ export const PLANS: Record<PlanType, PlanDetails> = {
       'Cheksiz sinf',
       'Cheksiz oddiy dars',
       'Cheksiz oddiy test',
-      '4 000 ta AI tekshirish',
+      '17 000 AI limiti',
       'Maktab boshqaruv paneli',
       'Barcha analitika va monitoring',
-      'Sinf va o\'quvchi progressi',
-      'Excel/PDF eksport',
+      'PDF / Excel eksport',
       '24/7 Shaxsiy menejer ko\'magi'
     ]
   }
 };
 
+// Simplified Add-On AI Packs
 export const AI_PACKS: Record<AiPackType, AiPackDetails> = {
-  PACK_500: {
-    id: 'PACK_500',
-    name: 'AI Pack 500',
-    credits: 500,
-    price: '29 000 so\'m',
-    priceNumber: 29000,
-    description: '+500 ta qo\'shimcha AI tekshirish'
-  },
   PACK_1000: {
     id: 'PACK_1000',
-    name: 'AI Pack 1000',
+    name: '+1 000 AI limiti',
     credits: 1000,
-    price: '49 000 so\'m',
-    priceNumber: 49000,
-    description: '+1 000 ta qo\'shimcha AI tekshirish'
+    price: '9 000 so\'m',
+    priceNumber: 9000,
+    description: 'Tarifingizni almashtirmasdan +1 000 AI limiti qo\'shing'
+  },
+  PACK_3000: {
+    id: 'PACK_3000',
+    name: '+3 000 AI limiti',
+    credits: 3000,
+    price: '19 000 so\'m',
+    priceNumber: 19000,
+    description: 'Tarifingizni almashtirmasdan +3 000 AI limiti qo\'shing'
+  },
+  PACK_7000: {
+    id: 'PACK_7000',
+    name: '+7 000 AI limiti',
+    credits: 7000,
+    price: '39 000 so\'m',
+    priceNumber: 39000,
+    description: 'Tarifingizni almashtirmasdan +7 000 AI limiti qo\'shing'
+  },
+  PACK_500: {
+    id: 'PACK_500',
+    name: '+500 AI limiti',
+    credits: 500,
+    price: '5 000 so\'m',
+    priceNumber: 5000,
+    description: 'Qo\'shimcha AI limiti'
   }
 };
 
-// Unified dynamic AI Operation Credit Costs (in credits charged to user)
-export const AI_CREDIT_COSTS: Record<string, number> = {
-  answer_check: Number(process.env.AI_COST_ANSWER_CHECK || 1), // 1 credit per image/answer sheet
-  test_generation: Number(process.env.AI_COST_TEST_GEN || 2), // 2 credits per test generation
-  lesson_generation: Number(process.env.AI_COST_LESSON_GEN || 3), // 3 credits per lesson plan
-  text_analysis: Number(process.env.AI_COST_TEXT_ANALYSIS || 2), // 2 credits for dictation/essay
-  report_generation: Number(process.env.AI_COST_REPORT_GEN || 1) // 1 credit for class performance summary
+// Referral Program Config
+export const REFERRAL_CONFIG = {
+  inviterBonusAi: 300, // +300 AI limiti for person who invited
+  inviteeBonusAi: 200, // +200 AI limiti for new user on first purchase
+  bannerText: "Do'stingizni taklif qiling — Do'stingiz obuna olsa, sizga +300 AI limiti sovg'a."
 };
 
-// Unit financial cost per AI credit in Uzbek Som (Baseline worst-case)
-export const AI_COST_PER_CREDIT_UZS = Number(process.env.AI_COST_PER_CREDIT_UZS || 53);
+// Backend Hidden Economic Multipliers (Internal calculation only)
+export const AI_CREDIT_COSTS: Record<string, number> = {
+  answer_check: 1, // 1 AI limit per student test sheet
+  test_generation: 3, // 3 AI limit per AI test creation
+  lesson_generation: 5, // 5 AI limit per complete 45-min lesson plan
+  text_analysis: 8, // 8 AI limit for dictation / handwritten text analysis
+  open_question: 8, // 8 AI limit for essay / open question grading
+  report_generation: 1 // 1 AI limit for class performance summary
+};
+
+// Unit financial cost per AI credit in Uzbek Som (Baseline internal benchmark)
+export const AI_COST_PER_CREDIT_UZS = Number(process.env.AI_COST_PER_CREDIT_UZS || 12);
 
 // Centralized AI Models Configuration (No hardcoded strings)
 export const AI_MODELS = {

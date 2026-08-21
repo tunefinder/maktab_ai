@@ -25,6 +25,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { fastFetch } from "@/utils/fastFetch";
 import { isUnlimited } from "@/utils/aiConfig";
+import AiLimitInfoModal from "@/components/AiLimitInfoModal";
 
 interface StatsData {
   classCount?: number;
@@ -76,6 +77,7 @@ export default function Home() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [licStatus, setLicStatus] = useState<LicenseStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -134,7 +136,7 @@ export default function Home() {
       {/* 2. Key Metrics Bar (4 Simple Clear Cards) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* Metric 1: AI Tekshirish */}
+        {/* Metric 1: AI Limiti */}
         <div className={`p-5 rounded-3xl border transition-all ${
           isAiCritical
             ? 'bg-rose-50/70 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/60'
@@ -143,12 +145,19 @@ export default function Home() {
             : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 shadow-xs'
         }`}>
           <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
-            <span>AI Tekshirish</span>
-            <Zap className={`w-4 h-4 ${isAiCritical ? 'text-rose-500' : isAiWarning ? 'text-amber-500' : 'text-indigo-500'}`} />
+            <span>AI Limiti</span>
+            <button 
+              type="button" 
+              onClick={() => setIsInfoModalOpen(true)}
+              className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              title="Qanday hisoblanadi?"
+            >
+              <Zap className={`w-4 h-4 ${isAiCritical ? 'text-rose-500' : isAiWarning ? 'text-amber-500' : 'text-indigo-500'}`} />
+            </button>
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-slate-100">
             {u ? u.remainingAiCredits.toLocaleString() : (stats?.attemptCount || 0)}
-            <span className="text-xs text-slate-400 font-normal ml-1">/ {u?.totalAiCredits || 1000}</span>
+            <span className="text-xs text-slate-400 font-normal ml-1">/ {u?.totalAiCredits ? u.totalAiCredits.toLocaleString() : "3 200"}</span>
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
             <div
@@ -159,8 +168,10 @@ export default function Home() {
             />
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 font-medium">
-            <span>Qoldiq tekshiruvlar</span>
-            <Link href="/pricing" className="text-indigo-600 font-bold hover:underline">+Olish</Link>
+            <span>
+              {isAiCritical ? "AI limitingiz tugashiga yaqin" : isAiWarning ? "70% ishlatildi" : "Mavjud limit"}
+            </span>
+            <Link href="/pricing" className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Tarif</Link>
           </div>
         </div>
 
@@ -341,6 +352,12 @@ export default function Home() {
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
+
+      {/* Info Modal Component */}
+      <AiLimitInfoModal 
+        isOpen={isInfoModalOpen} 
+        onClose={() => setIsInfoModalOpen(false)} 
+      />
 
     </div>
   );

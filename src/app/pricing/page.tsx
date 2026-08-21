@@ -15,10 +15,16 @@ import {
   School,
   Flame,
   PlusCircle,
-  RefreshCw
+  RefreshCw,
+  Users,
+  Gift,
+  CheckCircle2,
+  X
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { PLANS, AI_PACKS, PlanType, isUnlimited } from "@/utils/aiConfig";
+import { PLANS, AI_PACKS, PlanType, isUnlimited, REFERRAL_CONFIG } from "@/utils/aiConfig";
+import AiLimitInfoModal from "@/components/AiLimitInfoModal";
+import Link from "next/link";
 
 interface SubscriptionStatus {
   plan: PlanType;
@@ -48,6 +54,7 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
   const [licenseKey, setLicenseKey] = useState("");
   const [activating, setActivating] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -98,336 +105,569 @@ export default function PricingPage() {
   };
 
   const currentPlan = status?.plan || 'FREE';
-  const u = status?.usage;
-
-  const planOrder: PlanType[] = ['START', 'PRO', 'MAX', 'MAKTAB_PRO', 'MAKTAB_VIP'];
 
   return (
-    <div className="max-w-7xl mx-auto py-6 px-4 pb-24 space-y-12 animate-in fade-in duration-300">
+    <div className="max-w-6xl mx-auto py-6 sm:py-10 px-4 space-y-12 animate-in fade-in duration-300 pb-28">
       
-      {/* Header */}
-      <div className="text-center space-y-3 max-w-3xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-bold border border-indigo-200/80 dark:border-indigo-800/80 shadow-xs">
-          <Sparkles className="w-4 h-4 text-indigo-500" />
-          <span>Shaffof va Qulay Ta'lim Tariflari</span>
+      {/* 1. Header & Hero */}
+      <div className="text-center space-y-3 max-w-2xl mx-auto">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-200/60 dark:border-indigo-800">
+          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Ustozlar va Maktablar uchun hamyonbop tariflar</span>
         </div>
-        
-        <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-          O'zingizga mos tarifni tanlang
+        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+          Oddiy, tushunarli va qulay tariflar
         </h1>
-        
         <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
-          O'qituvchilar va maktablar uchun sun'iy intellekt orqali darslar, testlar va daftarlarni tekshirish imkoniyati.
+          Kutubxonangizdagi har bir sinf va daftar uchun eng maqbul rejani tanlang. Yashirin to'lovlar yo'q.
         </p>
       </div>
 
-      {/* Current Subscription & Usage Bar (If user is logged in) */}
+      {/* 2. Current Subscription Status Card (If Logged In) */}
       {status && (
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-indigo-900/40">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-wider text-indigo-300 font-bold">Joriy Obuna:</span>
-                <span className="px-3 py-0.5 bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 text-xs font-black rounded-full">
-                  {status.planDetails.name}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Joriy tarifingiz:</span>
+              <span className="px-3 py-1 bg-indigo-600 text-white font-black text-xs rounded-full shadow-xs">
+                {PLANS[currentPlan]?.name || currentPlan}
+              </span>
+              {status.daysLeft !== null && currentPlan !== 'FREE' && (
+                <span className="text-xs text-slate-500 font-medium">
+                  ({status.daysLeft > 0 ? `${status.daysLeft} kun qoldi` : "Muddati tugagan"})
                 </span>
-                {status.daysLeft !== null && (
-                  <span className="text-xs text-slate-300">
-                    ({status.daysLeft} kun qoldi)
+              )}
+            </div>
+
+            {/* AI Limit Progress */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span>AI limiti:</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 font-black">
+                    {(status.usage.remainingAiCredits || 0).toLocaleString()} ta qoldi
                   </span>
-                )}
+                  <span className="text-slate-400 font-normal">
+                    / {(status.usage.totalAiCredits || 0).toLocaleString()}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsInfoModalOpen(true)}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>ⓘ Qanday hisoblanadi?</span>
+                </button>
               </div>
-              <p className="text-xs text-slate-400">
-                {status.planExpiresAt 
-                  ? `Amal qilish muddati: ${new Date(status.planExpiresAt).toLocaleDateString('uz-UZ')}`
-                  : "Bepul sinov holati"}
-              </p>
+              <div className="w-full sm:w-80 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    status.usage.aiProgressPct >= 90 ? 'bg-rose-500' : status.usage.aiProgressPct >= 70 ? 'bg-amber-500' : 'bg-indigo-600'
+                  }`}
+                  style={{ width: `${Math.min(100, status.usage.aiProgressPct)}%` }}
+                />
+              </div>
             </div>
-
-            {/* Quick Progress Mini Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              
-              {/* AI Credits */}
-              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-1">
-                <div className="flex items-center justify-between text-[11px] text-slate-300">
-                  <span>AI Qoldiq</span>
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <div className="text-sm font-black text-white">
-                  {u?.remainingAiCredits.toLocaleString()} / {u?.totalAiCredits.toLocaleString()}
-                </div>
-                <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      (u?.aiProgressPct || 0) > 90 ? 'bg-rose-500' :
-                      (u?.aiProgressPct || 0) > 70 ? 'bg-amber-400' : 'bg-emerald-400'
-                    }`}
-                    style={{ width: `${u?.aiProgressPct || 0}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Classes */}
-              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-1">
-                <div className="text-[11px] text-slate-300">Sinflar</div>
-                <div className="text-sm font-black text-white">
-                  {u?.classesCount} / {isUnlimited(u?.maxClasses || 0) ? 'Cheksiz' : u?.maxClasses}
-                </div>
-                <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${u?.classesProgressPct || 0}%` }} />
-                </div>
-              </div>
-
-              {/* Tests */}
-              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-1">
-                <div className="text-[11px] text-slate-300">Testlar</div>
-                <div className="text-sm font-black text-white">
-                  {u?.testsCount} / {isUnlimited(u?.maxTests || 0) ? 'Cheksiz' : u?.maxTests}
-                </div>
-                <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${u?.testsProgressPct || 0}%` }} />
-                </div>
-              </div>
-
-              {/* Lessons */}
-              <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-1">
-                <div className="text-[11px] text-slate-300">Darslar</div>
-                <div className="text-sm font-black text-white">
-                  {u?.lessonsCount} / {isUnlimited(u?.maxLessons || 0) ? 'Cheksiz' : u?.maxLessons}
-                </div>
-                <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-400 rounded-full" style={{ width: `${u?.lessonsProgressPct || 0}%` }} />
-                </div>
-              </div>
-
-            </div>
-
           </div>
+
+          <a
+            href="https://t.me/Novdaaibot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-5 py-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all border border-indigo-200/80 dark:border-indigo-800 shrink-0"
+          >
+            <Send className="w-4 h-4" />
+            <span>@Novdaaibot orqali to'lash</span>
+          </a>
         </div>
       )}
 
-      {/* 5 Main Subscription Tier Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 items-stretch">
-        {planOrder.map((planKey) => {
-          const p = PLANS[planKey];
-          const isCurrent = currentPlan === planKey;
-          const isPopular = p.isPopular;
-          const isSchool = p.isSchool;
-
-          return (
-            <div
-              key={planKey}
-              className={`rounded-3xl p-6 flex flex-col justify-between transition-all duration-200 relative ${
-                isPopular
-                  ? 'bg-gradient-to-b from-indigo-50/90 to-white dark:from-indigo-950/40 dark:to-slate-900 border-2 border-indigo-600 dark:border-indigo-500 shadow-xl lg:-translate-y-2'
-                  : isSchool
-                  ? 'bg-white dark:bg-slate-900 border-2 border-purple-300 dark:border-purple-800/80 shadow-md'
-                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md'
-              }`}
-            >
-              {/* Badge */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between min-h-[28px]">
-                  <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full ${
-                    isPopular 
-                      ? 'bg-indigo-600 text-white shadow-xs' 
-                      : isSchool 
-                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
-                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                  }`}>
-                    {p.badge}
-                  </span>
-
-                  {isCurrent && (
-                    <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 rounded-md">
-                      Faol
-                    </span>
-                  )}
-                </div>
-
-                {/* Title & Price */}
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                    <span>{p.name}</span>
-                    {isPopular && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
-                    {isSchool && <Crown className="w-4 h-4 text-purple-500" />}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-1 min-h-[32px]">{p.description}</p>
-                </div>
-
-                <div className="py-2 border-y border-slate-100 dark:border-slate-800/80">
-                  <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
-                    {p.price.replace(" so'm", "")}
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-bold ml-1">so'm / 30 kun</span>
-                </div>
-
-                {/* Core Specifications */}
-                <div className="space-y-1.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-50/60 dark:bg-slate-800/40 p-3 rounded-2xl">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">AI tekshirish:</span>
-                    <b className="text-indigo-600 dark:text-indigo-400">{p.maxAiCredits.toLocaleString()} ta</b>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Sinflar:</span>
-                    <b>{isUnlimited(p.maxClasses) ? 'Cheksiz' : `${p.maxClasses} ta`}</b>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Darslar:</span>
-                    <b>{isUnlimited(p.maxLessons) ? 'Cheksiz' : `${p.maxLessons} ta`}</b>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Testlar:</span>
-                    <b>{isUnlimited(p.maxTests) ? 'Cheksiz' : `${p.maxTests} ta`}</b>
-                  </div>
-                </div>
-
-                {/* Features List */}
-                <ul className="space-y-2 pt-2">
-                  {p.features.map((feat, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[11px] text-slate-700 dark:text-slate-300">
-                      <Check className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isPopular ? 'text-indigo-600' : 'text-emerald-500'}`} />
-                      <span>{feat}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Action Button */}
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <a
-                  href="https://t.me/Novdaaibot"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold shadow-sm transition-all active:scale-95 ${
-                    isPopular
-                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      : isSchool
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-800 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{isCurrent ? "Muddatni uzaytirish" : "Tarifni tanlash"}</span>
-                </a>
-              </div>
-
+      {/* 3. Main SaaS Plans Grid (Mobile-first, PRO prominently highlighted) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+        
+        {/* FREE PLAN */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{PLANS.FREE.name}</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold">
+                {PLANS.FREE.badge}
+              </span>
             </div>
-          );
-        })}
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-slate-100">0 so'm</div>
+              <p className="text-xs text-slate-500 mt-0.5">{PLANS.FREE.tagline || "Karta ma'lumoti talab qilinmaydi."}</p>
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 text-xs font-bold text-slate-800 dark:text-slate-200">
+              ⚡ 100 AI limiti (7 kunlik sinov)
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+              {PLANS.FREE.features.map((feat, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{feat}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot?start=trial"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs text-center transition-all block"
+          >
+            {PLANS.FREE.ctaText || "7 kun bepul boshlash"}
+          </a>
+        </div>
+
+        {/* START PLAN */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{PLANS.START.name}</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold">
+                {PLANS.START.badge}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-slate-100">
+                19 000 <span className="text-sm font-normal text-slate-500">so'm / oy</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{PLANS.START.tagline}</p>
+            </div>
+
+            <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-xs font-bold text-indigo-900 dark:text-indigo-200">
+              ⚡ 1 500 AI limiti
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+              {PLANS.START.features.map((feat, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{feat}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot?start=buy_START"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs text-center border border-indigo-200 dark:border-indigo-800 transition-all block"
+          >
+            {PLANS.START.ctaText || "19 000 so'mga boshlash"}
+          </a>
+        </div>
+
+        {/* PRO PLAN (⭐ ENG OMMABOP - HIGHLIGHTED) */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border-2 border-indigo-600 dark:border-indigo-500 shadow-lg relative flex flex-col justify-between space-y-6 md:-translate-y-2">
+          
+          <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-indigo-600 text-white text-xs font-black rounded-full shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+            <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+            <span>Eng ommabop</span>
+          </div>
+
+          <div className="space-y-4 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">PRO TARIF</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold">
+                ⭐ Tavsiya etiladi
+              </span>
+            </div>
+
+            <div>
+              <div className="text-4xl font-black text-indigo-600 dark:text-indigo-400">
+                39 000 <span className="text-sm font-normal text-slate-500">so'm / oy</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{PLANS.PRO.tagline}</p>
+            </div>
+
+            <div className="p-3.5 bg-indigo-600 text-white rounded-2xl text-xs font-bold shadow-xs flex items-center justify-between">
+              <span>⚡ 3 200 AI limiti</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-md">3 200 tagacha test</span>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-700 dark:text-slate-200">
+              {PLANS.PRO.features.map((feat, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0 font-bold" />
+                  <span className="font-medium">{feat}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot?start=buy_PRO"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-4 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm text-center shadow-md hover:shadow-indigo-500/20 transition-all block active:scale-98"
+          >
+            {PLANS.PRO.ctaText || "PRO ni tanlash"}
+          </a>
+        </div>
+
+        {/* MAX PLAN */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{PLANS.MAX.name}</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold">
+                {PLANS.MAX.badge}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-slate-100">
+                69 000 <span className="text-sm font-normal text-slate-500">so'm / oy</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{PLANS.MAX.tagline}</p>
+            </div>
+
+            <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-xs font-bold text-indigo-900 dark:text-indigo-200">
+              ⚡ 6 000 AI limiti
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+              {PLANS.MAX.features.map((feat, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{feat}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot?start=buy_MAX"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs text-center transition-all block"
+          >
+            {PLANS.MAX.ctaText || "MAX ni tanlash"}
+          </a>
+        </div>
+
+        {/* MAKTAB PRO PLAN */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{PLANS.MAKTAB_PRO.name}</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[11px] font-bold">
+                {PLANS.MAKTAB_PRO.badge}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-slate-100">
+                129 000 <span className="text-sm font-normal text-slate-500">so'm / oy</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{PLANS.MAKTAB_PRO.tagline}</p>
+            </div>
+
+            <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/40 text-xs font-bold text-blue-900 dark:text-blue-200">
+              ⚡ 11 000 AI limiti (5 o'qituvchi)
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+              {PLANS.MAKTAB_PRO.features.map((feat, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{feat}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot?start=buy_MAKTAB_PRO"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold text-xs text-center border border-blue-200 dark:border-blue-800 transition-all block"
+          >
+            {PLANS.MAKTAB_PRO.ctaText || "Maktab PRO ni tanlash"}
+          </a>
+        </div>
+
+        {/* MAKTAB VIP PLAN */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{PLANS.MAKTAB_VIP.name}</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[11px] font-bold">
+                {PLANS.MAKTAB_VIP.badge}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-slate-100">
+                199 000 <span className="text-sm font-normal text-slate-500">so'm / oy</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">{PLANS.MAKTAB_VIP.tagline}</p>
+            </div>
+
+            <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 rounded-2xl border border-amber-100 dark:border-amber-900/40 text-xs font-bold text-amber-900 dark:text-amber-200">
+              ⚡ 17 000 AI limiti (15 o'qituvchi)
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+              {PLANS.MAKTAB_VIP.features.map((feat, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{feat}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <a
+            href="https://t.me/Novdaaibot?start=buy_MAKTAB_VIP"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-bold text-xs text-center border border-amber-200 dark:border-amber-800 transition-all block"
+          >
+            {PLANS.MAKTAB_VIP.ctaText || "Maktab VIP ni tanlash"}
+          </a>
+        </div>
+
       </div>
 
-      {/* Add-on AI Packs Section */}
-      <div className="bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/70 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 p-8 rounded-3xl border border-indigo-100 dark:border-slate-800 shadow-sm space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* 4. Desktop Comparison Table */}
+      <div className="hidden lg:block bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Tariflarni taqqoslash</h3>
+          <p className="text-xs text-slate-500">O'zingizga eng mos keladigan imkoniyatlarni o'rganing</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400">
+                <th className="py-3 px-4 font-bold">Imkoniyat</th>
+                <th className="py-3 px-4 font-bold">START</th>
+                <th className="py-3 px-4 font-bold text-indigo-600">PRO ⭐</th>
+                <th className="py-3 px-4 font-bold">MAX</th>
+                <th className="py-3 px-4 font-bold">MAKTAB PRO</th>
+                <th className="py-3 px-4 font-bold">VIP</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+              <tr>
+                <td className="py-3.5 px-4 font-bold">Oylik to'lov</td>
+                <td className="py-3.5 px-4">19 000 so'm</td>
+                <td className="py-3.5 px-4 font-black text-indigo-600">39 000 so'm</td>
+                <td className="py-3.5 px-4">69 000 so'm</td>
+                <td className="py-3.5 px-4">129 000 so'm</td>
+                <td className="py-3.5 px-4">199 000 so'm</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">AI limiti</td>
+                <td className="py-3.5 px-4">1 500 ta</td>
+                <td className="py-3.5 px-4 font-black text-indigo-600">3 200 ta</td>
+                <td className="py-3.5 px-4">6 000 ta</td>
+                <td className="py-3.5 px-4">11 000 ta</td>
+                <td className="py-3.5 px-4">17 000 ta</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">O'qituvchilar soni</td>
+                <td className="py-3.5 px-4">1 ta</td>
+                <td className="py-3.5 px-4">1 ta</td>
+                <td className="py-3.5 px-4">2 ta</td>
+                <td className="py-3.5 px-4">5 ta</td>
+                <td className="py-3.5 px-4 font-bold">15 ta</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">Sinflar</td>
+                <td className="py-3.5 px-4">2 ta</td>
+                <td className="py-3.5 px-4 font-bold">6 ta</td>
+                <td className="py-3.5 px-4">15 ta</td>
+                <td className="py-3.5 px-4">50 ta</td>
+                <td className="py-3.5 px-4 font-bold text-emerald-600">Cheksiz</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">Dars rejalari va testlar</td>
+                <td className="py-3.5 px-4">30 ta</td>
+                <td className="py-3.5 px-4 font-bold">100 ta</td>
+                <td className="py-3.5 px-4">300 ta</td>
+                <td className="py-3.5 px-4">1 000 ta</td>
+                <td className="py-3.5 px-4 font-bold text-emerald-600">Cheksiz</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">PDF / Excel eksport</td>
+                <td className="py-3.5 px-4 text-slate-300">—</td>
+                <td className="py-3.5 px-4 text-emerald-600 font-bold">✓ Bor</td>
+                <td className="py-3.5 px-4 text-emerald-600 font-bold">✓ Bor</td>
+                <td className="py-3.5 px-4 text-emerald-600 font-bold">✓ Bor</td>
+                <td className="py-3.5 px-4 text-emerald-600 font-bold">✓ Bor</td>
+              </tr>
+              <tr>
+                <td className="py-3.5 px-4 font-bold">Qo'llab-quvvatlash</td>
+                <td className="py-3.5 px-4">Standart</td>
+                <td className="py-3.5 px-4 font-bold text-indigo-600">Ustuvor</td>
+                <td className="py-3.5 px-4">Ustuvor</td>
+                <td className="py-3.5 px-4">Priority</td>
+                <td className="py-3.5 px-4 font-bold text-amber-600">24/7 Menejer</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 5. Add-On AI Packs */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-xs font-bold">
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Qo'shimcha AI Paketlar</span>
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" />
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Qo'shimcha AI limit paketlari
+              </h2>
             </div>
-            <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">
-              Tarifni o'zgartirmasdan AI kredit qo'shish
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Oylik AI tekshirish limitingiz tugab qolsa, alohida qo'shimcha paket xarid qilib balansingizni to'ldirishingiz mumkin.
+            <p className="text-xs text-slate-500 mt-1">
+              Tarifingizni almashtirmasdan AI limitini oshiring. Limit mavjud tarifingiz davomida amal qiladi.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsInfoModalOpen(true)}
+            className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 self-start sm:self-auto"
+          >
+            ⓘ Qanday hisoblanadi?
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between space-y-4">
+            <div className="space-y-1">
+              <span className="text-xs font-bold text-slate-500 uppercase">AI Pack 1 000</span>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">9 000 so'm</div>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">+1 000 ta qo'shimcha AI limiti</p>
+            </div>
+            <a
+              href="https://t.me/Novdaaibot?start=buy_PACK_1000"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-4 bg-white dark:bg-slate-700 hover:bg-slate-100 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl text-center border border-slate-200 dark:border-slate-600 block transition-all"
+            >
+              Sotib olish
+            </a>
+          </div>
+
+          <div className="p-5 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 flex flex-col justify-between space-y-4">
+            <div className="space-y-1">
+              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">AI Pack 3 000 ⭐</span>
+              <div className="text-2xl font-black text-indigo-900 dark:text-indigo-200">19 000 so'm</div>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">+3 000 ta qo'shimcha AI limiti</p>
+            </div>
+            <a
+              href="https://t.me/Novdaaibot?start=buy_PACK_3000"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl text-center shadow-xs block transition-all"
+            >
+              Sotib olish
+            </a>
+          </div>
+
+          <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex flex-col justify-between space-y-4">
+            <div className="space-y-1">
+              <span className="text-xs font-bold text-slate-500 uppercase">AI Pack 7 000</span>
+              <div className="text-2xl font-black text-slate-900 dark:text-slate-100">39 000 so'm</div>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">+7 000 ta qo'shimcha AI limiti</p>
+            </div>
+            <a
+              href="https://t.me/Novdaaibot?start=buy_PACK_7000"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-4 bg-white dark:bg-slate-700 hover:bg-slate-100 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl text-center border border-slate-200 dark:border-slate-600 block transition-all"
+            >
+              Sotib olish
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Referral Program Banner */}
+      <div className="bg-gradient-to-r from-indigo-600 to-violet-700 text-white rounded-3xl p-6 sm:p-8 shadow-md flex flex-col sm:flex-row items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3.5 bg-white/10 rounded-2xl backdrop-blur-xs border border-white/20 shrink-0">
+            <Gift className="w-8 h-8 text-amber-300" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold">Do'stingizni taklif qiling!</h3>
+            <p className="text-xs sm:text-sm text-indigo-100">
+              {REFERRAL_CONFIG.bannerText}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Object.entries(AI_PACKS).map(([packKey, pack]) => (
-            <div
-              key={packKey}
-              className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4"
-            >
-              <div className="space-y-1 text-center sm:text-left">
-                <span className="text-xs font-black uppercase text-indigo-600 dark:text-indigo-400">
-                  {pack.name}
-                </span>
-                <div className="text-xl font-black text-slate-900 dark:text-slate-100">
-                  +{pack.credits.toLocaleString()} ta AI tekshirish
-                </div>
-                <p className="text-xs text-slate-500">{pack.price}</p>
-              </div>
-
-              <a
-                href="https://t.me/Novdaaibot"
-                target="_blank"
-                rel="noreferrer"
-                className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Paketni olish ({pack.price})</span>
-              </a>
-            </div>
-          ))}
-        </div>
+        <a
+          href="https://t.me/Novdaaibot?start=referral"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-6 py-3.5 bg-white text-indigo-700 font-black text-xs rounded-2xl shadow-sm hover:bg-indigo-50 transition-all shrink-0 active:scale-95"
+        >
+          Havolani olish
+        </a>
       </div>
 
-      {/* License Key Activation Card */}
-      <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-lg space-y-5 text-center">
-        <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-          <KeyRound className="w-6 h-6" />
+      {/* 7. License Key Activation Card */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+            <KeyRound className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+              Telegram Bot orqali olingan kalit bormi?
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              @Novdaaibot orqali to'lov qilib olgan kalitingizni kiriting va tarifingizni bir zumda faollashtiring.
+            </p>
+          </div>
         </div>
 
-        <div>
-          <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Telegram Bot orqali olingan kalit bormi?
-          </h3>
-          <p className="text-xs text-slate-500 mt-1">
-            Bot orqali sotib olingan tarif yoki AI Pack kalitini kiriting va darhol faollashtiring.
-          </p>
-        </div>
-
-        <form onSubmit={handleActivate} className="flex flex-col sm:flex-row gap-2 max-w-md mx-auto">
+        <form onSubmit={handleActivate} className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
-            placeholder="PRO-XXXX-YYYY yoki PACK500-..."
+            placeholder="Masalan: PRO-2026-XXXXX yoki START-XXXXX"
             value={licenseKey}
-            onChange={(e) => setLicenseKey(e.target.value.toUpperCase())}
-            className="flex-1 px-4 py-3 text-xs sm:text-sm font-mono uppercase bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            onChange={(e) => setLicenseKey(e.target.value)}
+            disabled={activating}
+            className="flex-1 px-4 py-3.5 text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-mono"
           />
           <button
             type="submit"
             disabled={activating}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-2xl shadow-sm flex items-center justify-center gap-2 transition-all shrink-0 active:scale-98"
           >
-            {activating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Faollashtirish</span>}
+            {activating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Tekshirilmoqda...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Faollashtirish</span>
+              </>
+            )}
           </button>
         </form>
       </div>
 
-      {/* FAQ Section */}
-      <div className="max-w-3xl mx-auto space-y-4 pt-4">
-        <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 text-center flex items-center justify-center gap-2">
-          <HelpCircle className="w-5 h-5 text-indigo-500" />
-          <span>Ko'p beriladigan savollar</span>
-        </h3>
-
-        <div className="space-y-3 text-xs sm:text-sm">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <h4 className="font-bold text-slate-900 dark:text-slate-100">1. AI tekshirish nima degani?</h4>
-            <p className="text-slate-500 mt-1">
-              AI orqali daftar, test javob varaqasi, diktant yoki ochiq savollarni tekshirish 1 ta yoki 2 ta AI kreditni tashkil etadi. Barcha AI xizmatlari yagona kredit hisobingizdan yechiladi.
-            </p>
-          </div>
-
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <h4 className="font-bold text-slate-900 dark:text-slate-100">2. Cheksiz dars va test nima degani?</h4>
-            <p className="text-slate-500 mt-1">
-              Maktab VIP tarifida o'zingiz mustaqil tuzadigan standart test va darslar soni cheksiz. Agar AI yordamida avtomatik test yoki dars reja yaratmoqchi bo'lsangiz, ajratilgan 6 500 ta AI kreditdan foydalaniladi.
-            </p>
-          </div>
-
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <h4 className="font-bold text-slate-900 dark:text-slate-100">3. AI limitingiz tugasa nima qilish kerak?</h4>
-            <p className="text-slate-500 mt-1">
-              Tarifni o'zgartirmasdan, atigi 29 000 so'mga <b>AI Pack 500</b> yoki 49 000 so'mga <b>AI Pack 1000</b> qo'shimcha paketini sotib olishingiz mumkin.
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Info Modal Component */}
+      <AiLimitInfoModal 
+        isOpen={isInfoModalOpen} 
+        onClose={() => setIsInfoModalOpen(false)} 
+      />
 
     </div>
   );

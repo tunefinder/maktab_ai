@@ -261,7 +261,7 @@ export async function guardAiOperation(options: AiGuardOptions): Promise<
       success: false,
       response: new Response(
         JSON.stringify({
-          error: `Sizda yetarli AI tekshirish krediti mavjud emas! (Kerak: ${totalCost} ta, Qoldiq: ${remainingCredits} ta). Qo'shimcha AI Pack sotib oling yoki tarifingizni oshiring.`,
+          error: `Sizda yetarli AI limiti mavjud emas! (Kerak: ${totalCost} ta, Qoldiq: ${remainingCredits} ta). Qo'shimcha AI Pack sotib oling yoki tarifingizni oshiring.`,
           requiredCredits: totalCost,
           remainingCredits,
           plan: userPlan

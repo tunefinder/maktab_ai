@@ -47,13 +47,13 @@ function getReplyMenu() {
   return {
     keyboard: [
       [
-        { text: "🥉 START (39 000)" },
-        { text: "🥈 PRO (69 000) ⭐" },
-        { text: "💎 MAX (119 000)" }
+        { text: "🥉 START (19 000)" },
+        { text: "🥈 PRO (39 000) ⭐" },
+        { text: "💎 MAX (69 000)" }
       ],
       [
-        { text: "🏫 MAKTAB PRO (229 000)" },
-        { text: "👑 MAKTAB VIP (399 000)" }
+        { text: "🏫 MAKTAB PRO (129 000)" },
+        { text: "👑 MAKTAB VIP (199 000)" }
       ],
       [
         { text: "⚡ Qo'shimcha AI Paketlar" },
@@ -72,19 +72,22 @@ function getInlineMenu() {
   return {
     inline_keyboard: [
       [
-        { text: "🥉 START (39 000 so'm)", callback_data: 'buy_START' },
-        { text: "🥈 PRO (69 000 so'm) ⭐", callback_data: 'buy_PRO' }
+        { text: "🥉 START (19 000 so'm)", callback_data: 'buy_START' },
+        { text: "🥈 PRO (39 000 so'm) ⭐", callback_data: 'buy_PRO' }
       ],
       [
-        { text: "💎 MAX (119 000 so'm)", callback_data: 'buy_MAX' },
-        { text: "🏫 MAKTAB PRO (229 000)", callback_data: 'buy_MAKTAB_PRO' }
+        { text: "💎 MAX (69 000 so'm)", callback_data: 'buy_MAX' },
+        { text: "🏫 MAKTAB PRO (129 000)", callback_data: 'buy_MAKTAB_PRO' }
       ],
       [
-        { text: "👑 MAKTAB VIP (399 000 so'm)", callback_data: 'buy_MAKTAB_VIP' }
+        { text: "👑 MAKTAB VIP (199 000 so'm)", callback_data: 'buy_MAKTAB_VIP' }
       ],
       [
-        { text: "⚡ AI Pack 500 (29 000)", callback_data: 'buy_PACK_500' },
-        { text: "⚡ AI Pack 1000 (49 000)", callback_data: 'buy_PACK_1000' }
+        { text: "⚡ AI Pack 1 000 (9 000)", callback_data: 'buy_PACK_1000' },
+        { text: "⚡ AI Pack 3 000 (19 000)", callback_data: 'buy_PACK_3000' }
+      ],
+      [
+        { text: "⚡ AI Pack 7 000 (39 000)", callback_data: 'buy_PACK_7000' }
       ],
       [
         { text: "🎁 7 Kunlik Bepul Sinov Kaliti", callback_data: 'free_trial' }
@@ -148,37 +151,45 @@ async function answerCallbackQuery(callbackQueryId: string, text: string | null 
 
 async function sendInvoice(chatId: string | number, itemKey: string) {
   let title = "Ustoz PRO";
-  let amount = "69 000 so'm";
-  let description = "500 ta AI tekshirish, 6 ta sinf, 100 ta dars va test";
+  let amount = "39 000 so'm";
+  let description = "3 200 AI limiti, 6 ta sinf, 100 ta dars va test";
 
   if (itemKey === 'START') {
     title = "START (30 kun)";
-    amount = "39 000 so'm";
-    description = "150 ta AI tekshirish, 2 ta sinf, 40 ta dars, 30 ta test";
+    amount = "19 000 so'm";
+    description = "1 500 AI limiti, 2 ta sinf, 30 ta dars, 30 ta test";
   } else if (itemKey === 'PRO') {
     title = "🥈 USTOZ PRO (30 kun) ⭐";
-    amount = "69 000 so'm";
-    description = "500 ta AI tekshirish, 6 ta sinf, 100 ta dars, 100 ta test";
+    amount = "39 000 so'm";
+    description = "3 200 AI limiti, 6 ta sinf, 100 ta dars, 100 ta test";
   } else if (itemKey === 'MAX') {
     title = "💎 USTOZ MAX (30 kun)";
-    amount = "119 000 so'm";
-    description = "1 000 ta AI tekshirish, 15 ta sinf, 300 ta dars, 300 ta test";
+    amount = "69 000 so'm";
+    description = "6 000 AI limiti, 15 ta sinf, 300 ta dars, 300 ta test";
   } else if (itemKey === 'MAKTAB_PRO') {
     title = "🏫 MAKTAB PRO (30 kun)";
-    amount = "229 000 so'm";
-    description = "2 200 ta AI tekshirish, 50 ta sinf, 1 000 ta dars va test, 5 ta o'qituvchi";
+    amount = "129 000 so'm";
+    description = "11 000 AI limiti, 50 ta sinf, 1 000 ta dars va test, 5 ta o'qituvchi";
   } else if (itemKey === 'MAKTAB_VIP') {
     title = "👑 MAKTAB VIP (30 kun)";
-    amount = "399 000 so'm";
-    description = "4 000 ta AI tekshirish, Cheksiz sinflar va darslar, 15 ta o'qituvchi";
+    amount = "199 000 so'm";
+    description = "17 000 AI limiti, Cheksiz sinflar va darslar, 15 ta o'qituvchi";
+  } else if (itemKey === 'PACK_1000') {
+    title = "⚡ AI PACK 1 000";
+    amount = "9 000 so'm";
+    description = "+1 000 ta qo'shimcha AI limiti";
+  } else if (itemKey === 'PACK_3000') {
+    title = "⚡ AI PACK 3 000";
+    amount = "19 000 so'm";
+    description = "+3 000 ta qo'shimcha AI limiti";
+  } else if (itemKey === 'PACK_7000') {
+    title = "⚡ AI PACK 7 000";
+    amount = "39 000 so'm";
+    description = "+7 000 ta qo'shimcha AI limiti";
   } else if (itemKey === 'PACK_500') {
     title = "⚡ AI PACK 500";
-    amount = "29 000 so'm";
-    description = "+500 ta qo'shimcha AI tekshirish";
-  } else if (itemKey === 'PACK_1000') {
-    title = "⚡ AI PACK 1000";
-    amount = "49 000 so'm";
-    description = "+1 000 ta qo'shimcha AI tekshirish";
+    amount = "5 000 so'm";
+    description = "+500 ta qo'shimcha AI limiti";
   }
 
   const text = `
@@ -235,8 +246,8 @@ Xizmatdan to'liq va cheklovlarsiz foydalanish uchun quyidagi qulay tariflardan b
       const keyboard = {
         inline_keyboard: [
           [
-            { text: "🥉 START (39 000)", callback_data: 'buy_START' },
-            { text: "🥈 PRO (69 000) ⭐", callback_data: 'buy_PRO' }
+            { text: "🥉 START (19 000)", callback_data: 'buy_START' },
+            { text: "🥈 PRO (39 000) ⭐", callback_data: 'buy_PRO' }
           ],
           [
             { text: "⬅️ Asosiy menyu", callback_data: 'main_menu' }
@@ -248,12 +259,12 @@ Xizmatdan to'liq va cheklovlarsiz foydalanish uchun quyidagi qulay tariflardan b
       return;
     }
 
-    const key = generateKey('PRO');
+    const key = generateKey('FREE');
 
     await db.licenseKey.create({
       data: {
         key: key,
-        plan: 'PRO',
+        plan: 'FREE',
         durationDays: 7,
         isUsed: false
       }
@@ -274,7 +285,7 @@ Xizmatdan to'liq va cheklovlarsiz foydalanish uchun quyidagi qulay tariflardan b
 <i>(Nusxalash uchun kod ustiga bosing)</i>
 
 ⏳ <b>Amal qilish muddati:</b> 7 kun
-📊 <b>Imkoniyatlar:</b> 500 ta AI tekshirish, 6 ta sinf, 100 ta dars va test
+📊 <b>Imkoniyatlar:</b> 100 AI limiti, 1 ta sinf, 5 ta dars va test
 
 📲 <b>Faollashtirish uchun:</b>
 1. Saytga kiring: <b>${APP_URL}/pricing</b>
@@ -284,7 +295,7 @@ Xizmatdan to'liq va cheklovlarsiz foydalanish uchun quyidagi qulay tariflardan b
     const keyboard = {
       inline_keyboard: [
         [
-          { text: "🥈 Ustoz PRO Kaliti (69 000 so'm)", callback_data: 'buy_PRO' }
+          { text: "🥈 Ustoz PRO Kaliti (39 000 so'm)", callback_data: 'buy_PRO' }
         ],
         [
           { text: "⬅️ Asosiy menyu", callback_data: 'main_menu' }
@@ -321,16 +332,26 @@ async function approvePayment(adminChatId: string | number, messageId: number, c
     } else if (itemKey === 'MAKTAB_VIP') {
       keyPrefix = 'MKVIP';
       title = '👑 Maktab VIP (30 kun)';
-    } else if (itemKey === 'PACK_500') {
-      keyPrefix = 'PACK500';
-      creditsBonus = 500;
-      durationDays = 365;
-      title = '⚡ AI Pack 500 (+500 AI tekshirish)';
     } else if (itemKey === 'PACK_1000') {
       keyPrefix = 'PACK1000';
       creditsBonus = 1000;
       durationDays = 365;
-      title = '⚡ AI Pack 1000 (+1 000 AI tekshirish)';
+      title = '⚡ AI Pack 1000 (+1 000 AI limiti)';
+    } else if (itemKey === 'PACK_3000') {
+      keyPrefix = 'PACK3000';
+      creditsBonus = 3000;
+      durationDays = 365;
+      title = '⚡ AI Pack 3000 (+3 000 AI limiti)';
+    } else if (itemKey === 'PACK_7000') {
+      keyPrefix = 'PACK7000';
+      creditsBonus = 7000;
+      durationDays = 365;
+      title = '⚡ AI Pack 7000 (+7 000 AI limiti)';
+    } else if (itemKey === 'PACK_500') {
+      keyPrefix = 'PACK500';
+      creditsBonus = 500;
+      durationDays = 365;
+      title = '⚡ AI Pack 500 (+500 AI limiti)';
     }
 
     const key = generateKey(keyPrefix);
@@ -376,39 +397,40 @@ async function sendTariffs(chatId: string | number) {
   const text = `
 📊 <b>NOVDA AI (MAKTABAI) RASMIY TARIFLAR TIZIMI</b>
 
-🥉 <b>1. START — 39 000 so'm / 30 kun:</b>
+🥉 <b>1. START — 19 000 so'm / 30 kun:</b>
 • 1 ta o'qituvchi, 2 ta sinf
-• 40 ta dars, 30 ta test
-• <b>150 ta AI tekshirish</b>
+• 30 ta dars, 30 ta test
+• <b>1 500 AI limiti</b>
 • Oddiy hisobotlar va natijalar
 
-🥈 <b>2. USTOZ PRO — 69 000 so'm / 30 kun (⭐ Eng ommabop):</b>
+🥈 <b>2. USTOZ PRO — 39 000 so'm / 30 kun (⭐ Eng ommabop):</b>
 • 1 ta o'qituvchi, 6 ta sinf
 • 100 ta dars, 100 ta test
-• <b>500 ta AI tekshirish</b>
+• <b>3 200 AI limiti</b>
 • Kengaytirilgan hisobotlar, PDF/Excel eksport
 • Ustuvor qo'llab-quvvatlash
 
-💎 <b>3. USTOZ MAX — 119 000 so'm / 30 kun:</b>
+💎 <b>3. USTOZ MAX — 69 000 so'm / 30 kun:</b>
 • 2 ta o'qituvchi, 15 ta sinf
 • 300 ta dars, 300 ta test
-• <b>1 000 ta AI tekshirish</b>
+• <b>6 000 AI limiti</b>
 • To'liq analitika va sinflarni solishtirish
 
-🏫 <b>4. MAKTAB PRO — 229 000 so'm / 30 kun (🏫 Maktablar uchun):</b>
+🏫 <b>4. MAKTAB PRO — 129 000 so'm / 30 kun (🏫 Maktablar uchun):</b>
 • 5 ta o'qituvchi, 50 ta sinf
 • 1 000 ta dars, 1 000 ta test
-• <b>2 200 ta AI tekshirish</b>
+• <b>11 000 AI limiti</b>
 • Maktab dashboardi, sinflar tahlili, to'liq hisobot
 
-👑 <b>5. MAKTAB VIP — 399 000 so'm / 30 kun:</b>
+👑 <b>5. MAKTAB VIP — 199 000 so'm / 30 kun:</b>
 • 15 ta o'qituvchi, <b>Cheksiz sinf va darslar</b>
-• <b>4 000 ta AI tekshirish</b>
+• <b>17 000 AI limiti</b>
 • Maktab boshqaruv paneli, 24/7 menejer
 
 ⚡ <b>QO'SHIMCHA AI PAKETLAR:</b>
-• AI Pack 500: <b>+500 ta AI tekshirish</b> — 29 000 so'm
-• AI Pack 1000: <b>+1 000 ta AI tekshirish</b> — 49 000 so'm
+• AI Pack 1000: <b>+1 000 AI limiti</b> — 9 000 so'm
+• AI Pack 3000: <b>+3 000 AI limiti</b> — 19 000 so'm
+• AI Pack 7000: <b>+7 000 AI limiti</b> — 39 000 so'm
   `;
 
   await sendMessage(chatId, text.trim(), getInlineMenu());
@@ -456,13 +478,14 @@ async function handleMessage(msg: any) {
 <code>${PAYMENT_CARD}</code> (${PAYMENT_CARD_HOLDER})
 
 📌 <b>Tezkor Generator buyruqlari:</b>
-• <code>/gen start</code> — START kalit (39 000)
-• <code>/gen pro</code> — PRO kalit (69 000)
-• <code>/gen max</code> — MAX kalit (119 000)
-• <code>/gen maktab_pro</code> — Maktab PRO kalit (229 000)
-• <code>/gen maktab_vip</code> — Maktab VIP kalit (399 000)
-• <code>/gen pack500</code> — AI Pack 500 (+500 AI)
-• <code>/gen pack1000</code> — AI Pack 1000 (+1000 AI)
+• <code>/gen start</code> — START kalit (19 000)
+• <code>/gen pro</code> — PRO kalit (39 000)
+• <code>/gen max</code> — MAX kalit (69 000)
+• <code>/gen maktab_pro</code> — Maktab PRO kalit (129 000)
+• <code>/gen maktab_vip</code> — Maktab VIP kalit (199 000)
+• <code>/gen pack1000</code> — AI Pack 1 000 (9 000)
+• <code>/gen pack3000</code> — AI Pack 3 000 (19 000)
+• <code>/gen pack7000</code> — AI Pack 7 000 (39 000)
         `;
         await sendMessage(chatId, adminStats.trim());
       } catch (err) {
@@ -483,8 +506,10 @@ async function handleMessage(msg: any) {
       else if (sub === 'max') { plan = 'MAX'; prefix = 'MAX'; }
       else if (sub === 'maktab_pro') { plan = 'MAKTAB_PRO'; prefix = 'MKPRO'; }
       else if (sub === 'maktab_vip') { plan = 'MAKTAB_VIP'; prefix = 'MKVIP'; }
-      else if (sub === 'pack500') { plan = 'PACK_500'; prefix = 'PACK500'; bonus = 500; days = 365; }
       else if (sub === 'pack1000') { plan = 'PACK_1000'; prefix = 'PACK1000'; bonus = 1000; days = 365; }
+      else if (sub === 'pack3000') { plan = 'PACK_3000'; prefix = 'PACK3000'; bonus = 3000; days = 365; }
+      else if (sub === 'pack7000') { plan = 'PACK_7000'; prefix = 'PACK7000'; bonus = 7000; days = 365; }
+      else if (sub === 'pack500') { plan = 'PACK_500'; prefix = 'PACK500'; bonus = 500; days = 365; }
 
       const key = generateKey(prefix);
       await db.licenseKey.create({

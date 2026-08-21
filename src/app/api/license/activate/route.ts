@@ -37,10 +37,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. AI Pack Activation (PACK_500, PACK_1000)
-    if (license.plan === 'PACK_500' || license.plan === 'PACK_1000') {
-      const packCredits = license.creditsBonus || (license.plan === 'PACK_500' ? 500 : 1000);
-      const packName = AI_PACKS[license.plan as AiPackType]?.name || `${packCredits} ta AI kredit`;
+    // 1. AI Pack Activation (PACK_1000, PACK_3000, PACK_7000, PACK_500)
+    if (license.plan.startsWith('PACK_') || license.creditsBonus > 0) {
+      const packCredits = license.creditsBonus || (
+        license.plan === 'PACK_7000' ? 7000 :
+        license.plan === 'PACK_3000' ? 3000 :
+        license.plan === 'PACK_1000' ? 1000 : 500
+      );
+      const packName = AI_PACKS[license.plan as AiPackType]?.name || `+${packCredits.toLocaleString()} AI limiti`;
 
       const [updatedUser] = await db.$transaction([
         db.user.update({
@@ -61,7 +65,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `Tabriklaymiz! "${packName}" (+${packCredits} ta AI tekshirish) hisobingizga muvaffaqiyatli qo'shildi! ⚡`,
+        message: `Tabriklaymiz! "${packName}" hisobingizga muvaffaqiyatli qo'shildi! ⚡`,
         bonusCredits: updatedUser.bonusCredits
       });
     }

@@ -364,7 +364,7 @@ export default function LessonPlanner() {
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5 text-amber-300" />
-                    <span>Dars Rejasini Yaratish (3 AI kredit)</span>
+                    <span>Dars Rejasini Yaratish</span>
                   </>
                 )}
               </Button>

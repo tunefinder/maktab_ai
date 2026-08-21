@@ -449,15 +449,15 @@ export default function Grader() {
             </div>
           )}
 
-          {/* Live Credit Cost Notice & Submit CTA */}
+          {/* Live AI Limit Notice & Submit CTA */}
           <div className="pt-4 space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl">
               <span className="flex items-center gap-1.5 font-medium">
                 <Zap className="w-4 h-4 text-amber-500" />
-                <span>Tekshirish qiymati:</span>
+                <span>AI limitingizdan foydalaniladi:</span>
               </span>
-              <b className="text-slate-900 dark:text-slate-100 font-bold">
-                {selectedImages.length > 0 ? `${selectedImages.length} ta AI kredit` : "0 ta kredit"}
+              <b className="text-indigo-600 dark:text-indigo-400 font-bold">
+                {selectedImages.length > 0 ? `Taxminan ${selectedImages.length} ta` : "0 ta"}
               </b>
             </div>
 
@@ -475,7 +475,7 @@ export default function Grader() {
               ) : (
                 <>
                   <Sparkles className="w-5 h-5 text-amber-300" />
-                  <span>AI Orqali Tekshirishni Boshlash ({selectedImages.length} ta daftar)</span>
+                  <span>{selectedImages.length} ta ishni AI orqali tekshirish</span>
                 </>
               )}
             </Button>
