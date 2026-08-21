@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/utils/db';
 import { getCurrentUser } from '@/utils/auth';
+import { getPlanDetails } from '@/utils/aiConfig';
 
 export async function GET() {
   try {
@@ -46,14 +47,13 @@ export async function POST(req: Request) {
     });
 
     const userPlan = user.plan || 'FREE';
-    const maxAllowed = userPlan === 'VIP' ? 999999 : userPlan === 'PRO' ? 6 : 1;
+    const planDetails = getPlanDetails(userPlan);
+    const maxAllowed = planDetails.maxClasses;
 
-    if (currentClassesCount >= maxAllowed) {
+    if (maxAllowed !== -1 && currentClassesCount >= maxAllowed) {
       return NextResponse.json(
         { 
-          error: userPlan === 'FREE' 
-            ? "Bepul tarifda faqat 1 ta sinf yaratish mumkin. 6 ta sinf yaratish uchun Ustoz PRO tarifini faollashtiring." 
-            : "Ustoz PRO tarifidagi 6 ta sinf limiti to'ldi. Cheksiz sinflar uchun Maktab VIP tarifini faollashtiring." 
+          error: `Sizning "${planDetails.name}" tarifingizdagi ${maxAllowed} ta sinf yaratish limiti to'ldi. Ko'proq sinf qo'shish uchun tarifingizni yangilang.` 
         }, 
         { status: 403 }
       );

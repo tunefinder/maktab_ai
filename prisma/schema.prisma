@@ -7,33 +7,39 @@ generator client {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  username      String?
-  name          String
-  email         String?   @unique
-  phone         String?   @unique
-  telegramId    String?   @unique
-  subject       String?
-  school        String?
-  avatarUrl     String?
-  passwordHash  String?
-  role          String    @default("TEACHER")
-  plan          String    @default("FREE") // "FREE" | "PRO" | "VIP"
-  planExpiresAt DateTime?
-  usedNotebooks Int       @default(0)
-  usedTests     Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                 String    @id @default(uuid())
+  username           String?
+  name               String
+  email              String?   @unique
+  phone              String?   @unique
+  telegramId         String?   @unique
+  subject            String?
+  school             String?
+  avatarUrl          String?
+  passwordHash       String?
+  role               String    @default("TEACHER")
+  plan               String    @default("FREE") // "FREE" | "START" | "PRO" | "MAX" | "MAKTAB_PRO" | "MAKTAB_VIP"
+  planExpiresAt      DateTime?
+  subscriptionStatus String    @default("ACTIVE") // "ACTIVE" | "EXPIRED" | "CANCELLED" | "PENDING"
+  usedNotebooks      Int       @default(0)
+  usedTests          Int       @default(0)
+  usedLessons        Int       @default(0)
+  usedAiCredits      Int       @default(0)
+  bonusCredits       Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  classes       Class[]
-  tests         Test[]
+  classes            Class[]
+  tests              Test[]
+  aiUsageLogs        AiUsageLog[]
 }
 
 model LicenseKey {
   id            String    @id @default(uuid())
-  key           String    @unique // e.g. "PRO-USTOZ-2026", "VIP-MAKTAB-2026"
-  plan          String    // "PRO" | "VIP"
+  key           String    @unique // e.g. "START-XXXX-YYYY", "PRO-XXXX-YYYY", "PACK500-XXXX-YYYY"
+  plan          String    // "START" | "PRO" | "MAX" | "MAKTAB_PRO" | "MAKTAB_VIP" | "PACK_500" | "PACK_1000"
   durationDays  Int       @default(30)
+  creditsBonus  Int       @default(0)
   isUsed        Boolean   @default(false)
   usedByUserId  String?
   usedAt        DateTime?
@@ -141,4 +147,30 @@ model TrialClaim {
   key        String
   createdAt  DateTime @default(now())
 }
+
+model AiUsageLog {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationType String    // "answer_check" | "test_generation" | "lesson_generation" | "text_analysis" | "report_generation"
+  creditsCost   Int
+  model         String?
+  fingerprint   String?
+  status        String    @default("SUCCESS") // "SUCCESS" | "FAILED" | "CACHED"
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([fingerprint])
+}
+
+model SystemConfig {
+  id                   String    @id @default("global")
+  isAiDisabledGlobally Boolean   @default(false)
+  aiCostPerCreditUzs   Float     @default(24)
+  paymentCard          String    @default("9860 1666 5511 7843")
+  paymentCardHolder    String    @default("Samar Dasturchi")
+  updatedAt            DateTime  @updatedAt
+}
+
 

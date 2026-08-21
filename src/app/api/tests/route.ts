@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/utils/db';
 import { getCurrentUser } from '@/utils/auth';
+import { getPlanDetails } from '@/utils/aiConfig';
 
 export async function GET(req: Request) {
   try {
@@ -55,14 +56,13 @@ export async function POST(req: Request) {
     });
 
     const userPlan = user.plan || 'FREE';
-    const maxAllowed = userPlan === 'VIP' ? 999999 : userPlan === 'PRO' ? 100 : 3;
+    const planDetails = getPlanDetails(userPlan);
+    const maxAllowed = planDetails.maxTests;
 
-    if (currentTestsCount >= maxAllowed) {
+    if (maxAllowed !== -1 && currentTestsCount >= maxAllowed) {
       return NextResponse.json(
         { 
-          error: userPlan === 'FREE' 
-            ? "Bepul tarifda faqat 3 ta test yaratish mumkin. 100 ta test yaratish uchun Ustoz PRO tarifini faollashtiring." 
-            : "Ustoz PRO tarifidagi 100 ta test limiti to'ldi. Cheksiz testlar uchun Maktab VIP tarifini faollashtiring." 
+          error: `Sizning "${planDetails.name}" tarifingizdagi ${maxAllowed} ta test yaratish limiti to'ldi. Ko'proq test qo'shish uchun tarifingizni yangilang.` 
         }, 
         { status: 403 }
       );

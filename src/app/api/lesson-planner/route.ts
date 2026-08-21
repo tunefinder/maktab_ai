@@ -2,6 +2,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { streamObject } from 'ai';
 import { z } from 'zod';
 import mammoth from 'mammoth';
+import { guardAiOperation } from '@/utils/aiGuard';
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || "",
@@ -16,6 +17,22 @@ export async function POST(request: Request) {
 
     if (!grade || !subject || !topic || !duration) {
       return new Response(JSON.stringify({ error: "Barcha asosiy maydonlarni to'ldiring" }), { status: 400 });
+    }
+
+    // 1. Guard check for lesson generation (3 credits)
+    const guardResult = await guardAiOperation({
+      operationType: 'lesson_generation',
+      modelName: 'gemini-3.6-flash',
+      fingerprintPayload: {
+        grade,
+        subject,
+        topic: topic.trim().toLowerCase(),
+        duration
+      }
+    });
+
+    if (!guardResult.success) {
+      return guardResult.response;
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -96,6 +113,9 @@ Javobni aniq, o'qishga qulay va o'zbek tilida taqdim et.
       schema: schema,
       messages: messages,
     });
+
+    // Commit credits
+    await guardResult.context.commitCredits();
 
     return result.toTextStreamResponse();
 

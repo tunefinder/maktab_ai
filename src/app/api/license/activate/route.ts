@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/utils/db';
 import { getCurrentUser } from '@/utils/auth';
-import { seedInitialKeys } from '@/utils/licenseSeed';
+import { getPlanDetails, AI_PACKS, AiPackType } from '@/utils/aiConfig';
 
 export async function POST(req: Request) {
   try {
@@ -9,9 +9,6 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json({ error: "Avtorizatsiyadan o'tilmagan" }, { status: 401 });
     }
-
-    // Ensure seed keys exist
-    await seedInitialKeys();
 
     const body = await req.json();
     const { key } = body;
@@ -40,17 +37,55 @@ export async function POST(req: Request) {
       );
     }
 
-    // Calculate expiration date
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + license.durationDays);
+    // 1. AI Pack Activation (PACK_500, PACK_1000)
+    if (license.plan === 'PACK_500' || license.plan === 'PACK_1000') {
+      const packCredits = license.creditsBonus || (license.plan === 'PACK_500' ? 500 : 1000);
+      const packName = AI_PACKS[license.plan as AiPackType]?.name || `${packCredits} ta AI kredit`;
 
-    // Update user plan & mark license as used in a transaction
+      const [updatedUser] = await db.$transaction([
+        db.user.update({
+          where: { id: user.id },
+          data: {
+            bonusCredits: { increment: packCredits }
+          }
+        }),
+        db.licenseKey.update({
+          where: { id: license.id },
+          data: {
+            isUsed: true,
+            usedByUserId: user.id,
+            usedAt: new Date()
+          }
+        })
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        message: `Tabriklaymiz! "${packName}" (+${packCredits} ta AI tekshirish) hisobingizga muvaffaqiyatli qo'shildi! ⚡`,
+        bonusCredits: updatedUser.bonusCredits
+      });
+    }
+
+    // 2. Main Subscription Plan Activation (START, PRO, MAX, MAKTAB_PRO, MAKTAB_VIP)
+    const normalizedPlan = license.plan === 'VIP' ? 'MAKTAB_VIP' : license.plan;
+    const planDetails = getPlanDetails(normalizedPlan);
+
+    // Calculate expiration date (from now or extending current if same plan)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + (license.durationDays || 30));
+
+    // Reset monthly usage counters on new subscription cycle
     const [updatedUser] = await db.$transaction([
       db.user.update({
         where: { id: user.id },
         data: {
-          plan: license.plan,
-          planExpiresAt: expiresAt
+          plan: normalizedPlan,
+          planExpiresAt: expiresAt,
+          subscriptionStatus: 'ACTIVE',
+          usedAiCredits: 0,
+          usedNotebooks: 0,
+          usedLessons: 0,
+          usedTests: 0
         }
       }),
       db.licenseKey.update({
@@ -63,11 +98,9 @@ export async function POST(req: Request) {
       })
     ]);
 
-    const planTitle = license.plan === 'VIP' ? 'Maktab VIP' : 'Ustoz PRO';
-
     return NextResponse.json({
       success: true,
-      message: `Tabriklaymiz! "${planTitle}" tarifi ${license.durationDays} kunga muvaffaqiyatli faollashtirildi! 🎉`,
+      message: `Tabriklaymiz! "${planDetails.name}" tarifi ${license.durationDays} kunga muvaffaqiyatli faollashtirildi! 🎉`,
       plan: updatedUser.plan,
       planExpiresAt: updatedUser.planExpiresAt
     });

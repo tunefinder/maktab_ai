@@ -110,8 +110,12 @@ export async function getCurrentUser() {
           role: true,
           plan: true,
           planExpiresAt: true,
+          subscriptionStatus: true,
           usedNotebooks: true,
           usedTests: true,
+          usedLessons: true,
+          usedAiCredits: true,
+          bonusCredits: true,
           createdAt: true
         }
       });
@@ -135,8 +139,12 @@ export async function getCurrentUser() {
       role: session.role || "TEACHER",
       plan: session.plan || "FREE",
       planExpiresAt: session.planExpiresAt ? new Date(session.planExpiresAt) : null,
+      subscriptionStatus: "ACTIVE",
       usedNotebooks: 0,
       usedTests: 0,
+      usedLessons: 0,
+      usedAiCredits: 0,
+      bonusCredits: 0,
       createdAt: new Date()
     };
   } catch (err) {

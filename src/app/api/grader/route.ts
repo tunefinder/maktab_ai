@@ -3,6 +3,7 @@ import { streamObject } from 'ai';
 import { z } from 'zod';
 import { db } from '@/utils/db';
 import { getCurrentUser } from '@/utils/auth';
+import { guardAiOperation } from '@/utils/aiGuard';
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY || "",
@@ -108,26 +109,24 @@ export async function POST(request: Request) {
       return new Response(JSON.stringify({ error: "Kamida 1 ta rasm yuklanishi kerak" }), { status: 400 });
     }
 
-    const user = await getCurrentUser();
-    if (user) {
-      const dbUser = await db.user.findUnique({ where: { id: user.id } });
-      const currentPlan = dbUser?.plan || 'FREE';
-      const maxNotebooks = currentPlan === 'VIP' ? 15000 : currentPlan === 'PRO' ? 1000 : 20;
-      const currentUsed = dbUser?.usedNotebooks || 0;
+    const opType = (taskType === 'DIKTANT' || taskType === 'DICTATION' || taskType === 'OPEN_QUESTION' || taskType === 'ESSAY')
+      ? 'text_analysis'
+      : 'answer_check';
 
-      if (currentUsed + images.length > maxNotebooks) {
-        const errorMsg = currentPlan === 'FREE'
-          ? "Sizning Bepul tarifingizdagi 20 ta daftar tekshirish limiti to'ldi. 1 000 ta daftar tekshirish uchun Ustoz PRO tarifini faollashtiring."
-          : "Sizning Ustoz PRO tarifingizdagi 1 000 ta daftar tekshirish limiti to'ldi. 15 000 ta tekshirish uchun Maktab VIP tarifini faollashtiring.";
-
-        return new Response(JSON.stringify({ error: errorMsg }), { status: 403 });
+    const guardResult = await guardAiOperation({
+      operationType: opType,
+      unitsMultiplier: images.length,
+      modelName: 'gemini-3.6-flash',
+      fingerprintPayload: {
+        taskType,
+        testId,
+        imgCount: images.length,
+        textKey: (answerKey || originalText || questionText || '').slice(0, 100)
       }
+    });
 
-      // Increment usedNotebooks
-      await db.user.update({
-        where: { id: user.id },
-        data: { usedNotebooks: { increment: images.length } }
-      });
+    if (!guardResult.success) {
+      return guardResult.response;
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -234,6 +233,9 @@ VAZIFANG:
       schema: targetSchema,
       messages: [{ role: 'user', content: messageContent }],
     });
+
+    // Commit credit deduction atomically
+    await guardResult.context.commitCredits();
 
     return result.toTextStreamResponse();
 
