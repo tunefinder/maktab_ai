@@ -59,10 +59,14 @@ export default function Sidebar() {
         {user ? (
           <Link 
             href="/settings" 
-            className="w-8 h-8 rounded-xl bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary border border-primary/20 transition-colors"
+            className="w-8 h-8 rounded-xl overflow-hidden bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary border border-primary/20 transition-colors shrink-0"
             title="Profil"
           >
-            <User className="w-4 h-4 text-primary" />
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xs font-bold">{displayName.charAt(0).toUpperCase()}</span>
+            )}
           </Link>
         ) : (
           <Link 
@@ -128,10 +132,14 @@ export default function Sidebar() {
           {user ? (
             <Link href="/settings" className="flex items-center justify-between p-2.5 rounded-2xl bg-white/50 dark:bg-slate-800/50 border border-white/60 dark:border-slate-700/60 shadow-xs hover:shadow-sm transition-all group">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner group-hover:scale-105 transition-transform shrink-0">
-                  <span className="text-xs font-bold text-primary">
-                    {displayName.charAt(0).toUpperCase()}
-                  </span>
+                <div className="w-9 h-9 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner group-hover:scale-105 transition-transform shrink-0">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-bold text-primary">
+                      {displayName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{displayName}</p>

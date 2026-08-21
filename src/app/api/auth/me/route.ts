@@ -20,7 +20,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, subject, school, phone, email } = body;
+    const { name, subject, school, phone, email, avatarUrl } = body;
 
     const updated = await db.user.update({
       where: { id: currentUser.id },
@@ -30,9 +30,11 @@ export async function PUT(req: Request) {
         ...(school !== undefined ? { school: school?.trim() || null } : {}),
         ...(phone !== undefined ? { phone: phone?.trim() || null } : {}),
         ...(email !== undefined ? { email: email?.trim().toLowerCase() || null } : {}),
+        ...(avatarUrl !== undefined ? { avatarUrl: avatarUrl || null } : {}),
       },
       select: {
         id: true,
+        username: true,
         name: true,
         email: true,
         phone: true,
@@ -41,6 +43,9 @@ export async function PUT(req: Request) {
         school: true,
         avatarUrl: true,
         role: true,
+        plan: true,
+        planExpiresAt: true,
+        subscriptionStatus: true,
         createdAt: true
       }
     });

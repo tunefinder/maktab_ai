@@ -96,3 +96,47 @@ export async function compressImage(
 export async function compressImagesBatch(files: File[]): Promise<Array<{ data: string; mimeType: string }>> {
   return Promise.all(files.map(f => compressImage(f)));
 }
+
+/**
+ * Compresses and center-crops a user uploaded photo into a 320x320 circular avatar data URL
+ */
+export async function compressAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error("Faqat rasm fayllari (JPG, PNG, WEBP) qabul qilinadi"));
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const size = 320;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error("Rasmni qayta ishlashda xatolik"));
+        return;
+      }
+
+      // Center crop square
+      const minDim = Math.min(img.width, img.height);
+      const sx = (img.width - minDim) / 2;
+      const sy = (img.height - minDim) / 2;
+      ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      resolve(dataUrl);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Rasmni yuklashda xatolik"));
+    };
+
+    img.src = url;
+  });
+}

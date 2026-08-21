@@ -29,13 +29,17 @@ import {
   EyeOff,
   BookOpen,
   Calendar,
-  Send
+  Send,
+  Camera,
+  Trash2,
+  ImageIcon
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PLANS } from "@/utils/aiConfig";
+import { compressAvatar } from "@/utils/imageCompressor";
 import Link from "next/link";
 
 type SettingsTab = 'profile' | 'subscription' | 'security' | 'appearance';
@@ -73,6 +77,7 @@ export default function SettingsPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -83,6 +88,54 @@ export default function SettingsPage() {
       if (user.email) setEmail(user.email);
     }
   }, [user]);
+
+  // Avatar Upload Handler (Single file from gallery/camera, replaces old)
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.type.startsWith('image/')) {
+      toast.error("Iltimos, faqat rasm faylini tanlang (JPG, PNG)");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    const toastId = toast.loading("Profil rasmi yuklanmoqda...");
+
+    try {
+      const compressedDataUrl = await compressAvatar(file);
+      const success = await updateProfile({ avatarUrl: compressedDataUrl });
+      if (success) {
+        toast.success("Profil rasmi muvaffaqiyatli o'zgartirildi! 📸", { id: toastId });
+      } else {
+        toast.error("Rasmni saqlashda xatolik yuz berdi", { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Rasmni yuklashda xatolik", { id: toastId });
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  // Delete Avatar Handler
+  const handleDeleteAvatar = async () => {
+    if (!confirm("Haqiqatan ham profil rasmini olib tashlamoqchimisiz?")) return;
+
+    setIsUploadingAvatar(true);
+    const toastId = toast.loading("Rasm o'chirilmoqda...");
+    try {
+      const success = await updateProfile({ avatarUrl: null });
+      if (success) {
+        toast.success("Profil rasmi olib tashlandi", { id: toastId });
+      }
+    } catch {
+      toast.error("Rasmni o'chirishda xatolik", { id: toastId });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // Save Profile Handler
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -175,14 +228,45 @@ export default function SettingsPage() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           
           <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            {/* Avatar with Plan Crown */}
-            <div className="relative self-start sm:self-auto">
-              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-3xl font-black shadow-xl ring-4 ring-white/10 shrink-0">
-                {displayName.charAt(0).toUpperCase()}
+            {/* Avatar with Photo or Initial + Plan Crown + Camera Button */}
+            <div className="relative self-start sm:self-auto group">
+              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-3xl font-black shadow-xl ring-4 ring-white/10 shrink-0 overflow-hidden relative">
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+
+                {isUploadingAvatar && (
+                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center">
+                    <RefreshCw className="w-6 h-6 animate-spin text-white" />
+                  </div>
+                )}
               </div>
-              <div className="absolute -bottom-1.5 -right-1.5 p-1.5 bg-amber-400 text-slate-950 rounded-xl shadow-md ring-2 ring-slate-900">
-                <Crown className="w-4 h-4 fill-current" />
+
+              {/* Crown Badge */}
+              <div className="absolute -top-1.5 -left-1.5 p-1 bg-amber-400 text-slate-950 rounded-lg shadow-md ring-2 ring-slate-900">
+                <Crown className="w-3.5 h-3.5 fill-current" />
               </div>
+
+              {/* Change Avatar Camera Button */}
+              <label 
+                className="absolute -bottom-1.5 -right-1.5 p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg ring-2 ring-slate-900 cursor-pointer transition-all hover:scale-110 active:scale-95 flex items-center justify-center"
+                title="Galereyadan yangi rasm yuklash"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleAvatarUpload}
+                  disabled={isUploadingAvatar}
+                />
+              </label>
             </div>
 
             {/* Profile Info */}
@@ -319,6 +403,53 @@ export default function SettingsPage() {
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               Ism-sharif, mutaxassislik va maktab ma'lumotlaringizni yangilang
             </p>
+          </div>
+
+          {/* Avatar Change Card */}
+          <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl font-bold shadow-md shrink-0 overflow-hidden relative">
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Profil Rasmi
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Galereyadan yangi rasm tanlang. Yangi rasm yuklanganda avvalgisi avtomatik almashtiriladi.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-1.5 active:scale-98">
+                <Camera className="w-3.5 h-3.5" />
+                <span>Rasm yuklash</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                  disabled={isUploadingAvatar}
+                />
+              </label>
+
+              {user?.avatarUrl && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAvatar}
+                  disabled={isUploadingAvatar}
+                  className="p-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 rounded-xl transition-all"
+                  title="Rasmni o'chirish"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           <form onSubmit={handleSaveProfile} className="space-y-5">
