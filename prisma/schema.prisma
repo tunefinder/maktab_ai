@@ -135,3 +135,10 @@ model Report {
   aiRecommendation String?
   createdAt        DateTime  @default(now())
 }
+
+model TrialClaim {
+  telegramId String   @id
+  key        String
+  createdAt  DateTime @default(now())
+}
+

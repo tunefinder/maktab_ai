@@ -1,3 +1,7 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { Pool } = require('pg');
@@ -653,10 +657,14 @@ async function startPolling() {
         for (const update of data.result) {
           lastUpdateId = Math.max(lastUpdateId, update.update_id);
 
-          if (update.message) {
-            await handleMessage(update.message);
-          } else if (update.callback_query) {
-            await handleCallback(update.callback_query);
+          try {
+            if (update.message) {
+              await handleMessage(update.message);
+            } else if (update.callback_query) {
+              await handleCallback(update.callback_query);
+            }
+          } catch (msgErr) {
+            console.error('Error handling update:', msgErr);
           }
         }
       } else if (!data.ok) {
@@ -669,6 +677,15 @@ async function startPolling() {
   }
 }
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 startPolling().catch((err) => {
   console.error('Fatal bot error:', err);
+  setTimeout(startPolling, 5000);
 });
