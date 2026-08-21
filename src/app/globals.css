@@ -15,7 +15,7 @@
 }
 
 .dark {
-  --app-bg-dark: #0b0f19;
+  --app-bg-dark: #0f172a;
   --background: var(--app-bg-dark);
   --foreground: #f8fafc;
 }
@@ -97,8 +97,8 @@ body {
 }
 
 .dark .app-ambient-bg {
-  background-color: #0b0f19;
-  background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+  background-color: #0f172a;
+  background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
                     radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
 }
 
