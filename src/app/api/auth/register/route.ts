@@ -28,9 +28,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+    if (cleanUsername.length < 6 || cleanUsername.length > 30) {
       return NextResponse.json(
-        { error: "Foydalanuvchi nomi 3 tadan 30 tagacha belgidan iborat bo'lishi kerak" },
+        { error: "Foydalanuvchi nomi (username) kamida 6 ta belgidan iborat bo'lishi kerak" },
         { status: 400 }
       );
     }
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
     if (!password || password.length < 6) {
       return NextResponse.json(
-        { error: "Parol xavfsizlik uchun kamida 6 ta belgidan iborat bo'lishi kerak" },
+        { error: "Parol kamida 6 ta belgidan iborat bo'lishi kerak" },
         { status: 400 }
       );
     }
