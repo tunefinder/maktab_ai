@@ -25,7 +25,8 @@ import {
   GraduationCap,
   Zap,
   RefreshCw,
-  Plus
+  Plus,
+  FileBarChart
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/Button";
@@ -47,6 +48,7 @@ export default function Grader() {
   
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedTestId, setSelectedTestId] = useState("");
+  const [savedTestId, setSavedTestId] = useState<string | null>(null);
   
   // Task Type
   const [taskType, setTaskType] = useState<TaskType>('TEST');
@@ -251,6 +253,7 @@ export default function Grader() {
     }
 
     setIsSaved(false);
+    setSavedTestId(null);
     setEditableResults([]);
     setIsLoading(true);
     setError(null);
@@ -309,6 +312,7 @@ export default function Grader() {
       const data = await res.json();
       if (res.ok && data.success) {
         setIsSaved(true);
+        if (data.testId) setSavedTestId(data.testId);
         toast.success(`Natijalar bazaga va hisobotga saqlandi! (${data.count} ta ish)`, { id: toastId });
       } else {
         toast.error(data.error || "Saqlashda xatolik yuz berdi", { id: toastId });
@@ -799,6 +803,16 @@ export default function Grader() {
                 <Save className="w-4 h-4" />
                 <span>{isSaved ? "Saqlangan ✅" : "Bazaga Saqlash"}</span>
               </button>
+
+              {isSaved && (
+                <Link
+                  href={savedTestId ? `/report?testId=${savedTestId}` : "/report"}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 animate-in fade-in duration-200"
+                >
+                  <FileBarChart className="w-4 h-4" />
+                  <span>Hisobotni ko'rish 📊</span>
+                </Link>
+              )}
             </div>
           </div>
 
